@@ -1,0 +1,116 @@
+name: Release Windows strict Markdown
+
+on:
+  push:
+    tags:
+      - 'windows-strict-markdown-*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-strict-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  release:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - name: Keep source line endings for source-based tests
+        run: git config --global core.autocrlf false
+
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: 22
+
+      - name: Activate pinned pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@11.5.1 --activate
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate messages and check types
+        run: |
+          pnpm exec paraglide-js compile
+          pnpm check
+
+      - name: Run Markdown, table and settings regression tests
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force artifacts | Out-Null
+          pnpm exec vitest run `
+            src/lib/editor-core/strictMarkdown.test.ts `
+            src/lib/editor-core/tableMarkdown.test.ts `
+            src/lib/editor-core/tableCommands.test.ts `
+            src/lib/editor-core/clipboardMarkdown.test.ts `
+            src/lib/editor-core/markdown.test.ts `
+            src/lib/editor-core/details.test.ts `
+            src/lib/editor-core/inlineSourceIntegration.test.ts `
+            src/lib/editor-core/nodeViews/TableNodeView.test.ts `
+            src/lib/editor-core/plugins/tableHtml.test.ts `
+            src/app/services/settings.test.ts `
+            src/app/services/editorInteractionController.test.ts `
+            src/app/services/imageInsertion.test.ts `
+            --maxWorkers=4 --minWorkers=1 --reporter=default --reporter=json --outputFile=artifacts/tests.json
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Build native Windows installer
+        run: pnpm build:win64:nsis
+
+      - name: Package portable app and checksums
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $release = 'src-tauri/target/x86_64-pc-windows-msvc/release'
+          $installers = @(Get-ChildItem "$release/bundle/nsis/*-setup.exe")
+          if ($installers.Count -ne 1) { throw 'Expected exactly one NSIS installer' }
+          Copy-Item $installers[0].FullName artifacts/Nomo_strict-markdown_x64-setup.exe
+          $app = Join-Path $env:RUNNER_TEMP 'Nomo-strict-markdown/Nomo'
+          New-Item -ItemType Directory -Force "$app/samples/assets" | Out-Null
+          Copy-Item "$release/nomo.exe" "$app/Nomo.exe"
+          if (Test-Path "$release/WebView2Loader.dll") {
+            Copy-Item "$release/WebView2Loader.dll" $app
+          }
+          Copy-Item sample.md "$app/samples/sample.md"
+          Copy-Item assets/128x128.png "$app/samples/assets/128x128.png"
+          Copy-Item LICENSE "$app/LICENSE"
+          Compress-Archive -Path $app -DestinationPath artifacts/Nomo_strict-markdown_x64.zip
+          Get-FileHash artifacts/*.exe, artifacts/*.zip -Algorithm SHA256 |
+            ForEach-Object { "$($_.Hash.ToLowerInvariant())  $([IO.Path]::GetFileName($_.Path))" } |
+            Set-Content artifacts/SHA256SUMS.txt -Encoding utf8
+          $tests = Get-Content artifacts/tests.json -Raw | ConvertFrom-Json
+          @"
+          ## Windows x64 严格 Markdown 版本
+
+          - 下载 x64-setup.exe 安装，或解压 x64.zip 后运行 Nomo.exe。
+          - 严格 Markdown 默认开启，以 GFM 为基础兼容 GitHub、GitLab 和 VS Code 预览。
+          - 保留原有及手动输入的 HTML；表格单元格内换行允许使用 <br>。
+          - 未编辑的表格保留原始格式；单元格编辑和列对齐尽量减少 Git 差异。
+          - 可在“设置 → 编辑器 → 严格 Markdown”关闭此模式，恢复 HTML 排版功能。
+
+          Windows 原生 MSVC 构建；类型检查通过，相关测试 $($tests.numPassedTests) 项通过、$($tests.numPendingTests) 项跳过。
+          全量测试另有原有失败；Windows 图形界面操作尚未实机验收。
+          此版本基于 Nomo 0.6.2，不覆盖原有稳定版。
+          "@ | Set-Content artifacts/RELEASE.md -Encoding utf8
+
+      - name: Publish Windows downloads
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_REPO: ${{ github.repository }}
+        shell: pwsh
+        run: |
+          gh release create "$env:GITHUB_REF_NAME" `
+            artifacts/Nomo_strict-markdown_x64-setup.exe `
+            artifacts/Nomo_strict-markdown_x64.zip `
+            artifacts/SHA256SUMS.txt `
+            --verify-tag --prerelease --latest=false `
+            --title 'Nomo 0.6.2 · 严格 Markdown（Windows x64）' `
+            --notes-file artifacts/RELEASE.md
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
