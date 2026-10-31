@@ -193,6 +193,9 @@ export class ProseMirrorEditorCore implements EditorCore {
   private detailsSession = new DetailsSession();
   private markdown: string;
   private originalMarkdown: string;
+  // Latest explicit source revision; separate from the saved/dirty baseline.
+  private sourceFormatMarkdown = '';
+  private sourceFormatDoc: ProseMirrorNode | null = null;
   private semanticViewDirty = false;
   private originalDoc: ProseMirrorNode;
   private pendingMarkdownDoc: ProseMirrorNode | null = null;
@@ -228,6 +231,8 @@ export class ProseMirrorEditorCore implements EditorCore {
     this.markdown = updateTocBlocks(options.markdown);
     this.originalMarkdown = this.markdown;
     this.originalDoc = this.parseSemanticDocument(this.markdown).doc;
+    this.sourceFormatMarkdown = this.markdown;
+    this.sourceFormatDoc = this.originalDoc;
     this.runtime = {
       readonly: options.readonly ?? false,
       mode: options.mode ?? 'semantic',
@@ -731,6 +736,8 @@ export class ProseMirrorEditorCore implements EditorCore {
     if (markdown !== previousMarkdown) this.detailsSession.beforeSourceChange(previousMarkdown, markdown);
     const delaySemanticSync = options?.sourceInput === true;
     this.markdown = updateTocBlocks(markdown);
+    this.sourceFormatMarkdown = this.markdown;
+    this.sourceFormatDoc = null;
     this.contentRevision += 1;
     this.syncSnapshot = null;
     this.version += 1;
@@ -792,6 +799,8 @@ export class ProseMirrorEditorCore implements EditorCore {
     // 快照不携带视图状态；不同正文不能按旧文档的数值位置继承临时展开。
     if (snapshot.markdown !== this.markdown) this.detailsSession.clear();
     this.markdown = updateTocBlocks(snapshot.markdown);
+    this.sourceFormatMarkdown = this.markdown;
+    this.sourceFormatDoc = null;
     this.originalMarkdown = this.markdown;
     this.originalDoc = this.parseSemanticDocument(this.markdown).doc;
     this.version = snapshot.version;
@@ -1586,6 +1595,7 @@ export class ProseMirrorEditorCore implements EditorCore {
   private createState(markdown: string): EditorState {
     this.detailsSession.prepare(markdown);
     const { doc, appended } = this.parseSemanticDocument(markdown);
+    if (this.sourceFormatDoc === null && markdown === this.sourceFormatMarkdown) this.sourceFormatDoc = doc;
     return EditorState.create({
       doc,
       selection: appended ? TextSelection.create(doc, doc.content.size - 1) : undefined,
@@ -1971,16 +1981,18 @@ export class ProseMirrorEditorCore implements EditorCore {
 
     this.clearPendingMarkdownSync();
 
-    const preservedSource = serializeSourceChange(removeEmptyTrailingParagraph(pendingDoc), this.originalDoc, this.originalMarkdown, this.runtime.strictMarkdown);
-    let serializedMarkdown = pendingDoc.eq(this.originalDoc)
-      ? this.originalMarkdown
-      : pendingDoc.content.eq(this.originalDoc.content)
-        ? `${String(pendingDoc.attrs.frontMatterPrefix ?? '')}${splitFrontMatter(this.originalMarkdown).body}`
+    const source = this.sourceFormatMarkdown;
+    const baseline = this.sourceFormatDoc ??= this.parseSemanticDocument(source).doc;
+    const preservedSource = serializeSourceChange(removeEmptyTrailingParagraph(pendingDoc), baseline, source, this.runtime.strictMarkdown);
+    let serializedMarkdown = pendingDoc.eq(baseline)
+      ? source
+      : pendingDoc.content.eq(baseline.content)
+        ? `${String(pendingDoc.attrs.frontMatterPrefix ?? '')}${splitFrontMatter(source).body}`
         : preservedSource ?? serializeMarkdown(removeEmptyTrailingParagraph(pendingDoc), { strictMarkdown: this.runtime.strictMarkdown });
     // Keep the file's existing newline convention, including its final newline.
-    const newline = this.originalMarkdown.includes('\r\n') ? '\r\n' : '\n';
+    const newline = source.includes('\r\n') ? '\r\n' : '\n';
     if (preservedSource === null) serializedMarkdown = serializedMarkdown.replace(/\r?\n/g, newline);
-    if (serializedMarkdown && this.originalMarkdown.endsWith('\n') && !serializedMarkdown.endsWith('\n')) serializedMarkdown += newline;
+    if (serializedMarkdown && source.endsWith('\n') && !serializedMarkdown.endsWith('\n')) serializedMarkdown += newline;
     // 保留 Markdown 字符串层的 TOC 规范化，但不再因此重建 EditorState。
     // 语义视图中的 toc_block 已由 tocSyncPlugin 原位同步，历史栈保持不变。
     this.markdown = updateTocBlocks(serializedMarkdown);

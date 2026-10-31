@@ -112,6 +112,7 @@ describe('clipboard and minimal escaping contract', () => {
 
   it.each([
     'Use `REG[3:0] PRI->Stage A > B \\path` here',
+    '```text\nREG[3:0] PRI->Stage A > B \\path\n```',
     '[REG[3:0]](https://example.com/a_(b)?x=1&y=2 "title")',
     '| Register | Code |\n|---|---|\n| REG[3:0] PRI->Stage A > B | `x*y` |',
   ])(
@@ -127,9 +128,12 @@ describe('clipboard and minimal escaping contract', () => {
         editor.pasteClipboard(payload);
         const saved = editor.getMarkdown();
         editor.setMarkdown(saved, { reason: 'open-file' });
-        expect(projectInlineSource(parseMarkdown(saved)).textContent).toBe(
-          projectInlineSource(parseMarkdown(source)).textContent,
-        );
+        const semantics = (markdown: string) =>
+          JSON.parse(
+            JSON.stringify(projectInlineSource(parseMarkdown(markdown)).toJSON()),
+            (key, value) => (key === 'align' && value === null ? 'left' : value),
+          );
+        expect(semantics(saved)).toEqual(semantics(source));
       }
     },
   );
@@ -146,6 +150,23 @@ describe('clipboard and minimal escaping contract', () => {
     view.dispatch(view.state.tr.insertText('changed', from, from + 'change me'.length));
     expect(editor.getMarkdown()).toBe(source.replace('change me', 'changed'));
   });
+
+  it.each([false, true])(
+    'retains unsaved manual source formatting when semantic editing resumes (deferred: %s)',
+    (deferred) => {
+      const { editor, view } = open('# Title\n\n- item\n\nchange me');
+      const manual = 'Title\n=====\n\n+ item\n\nchange me';
+      if (deferred) editor.updateOptions({ mode: 'source' });
+      editor.setMarkdown(manual, { reason: 'source-input', sourceInput: deferred });
+      if (deferred) editor.updateOptions({ mode: 'semantic' });
+      let from = -1;
+      view.state.doc.descendants((node, pos) => {
+        if (node.isText && node.text === 'change me') from = pos;
+      });
+      view.dispatch(view.state.tr.insertText('changed', from, from + 'change me'.length));
+      expect(editor.getMarkdown()).toBe(manual.replace('change me', 'changed'));
+    },
+  );
 
   it.each(['REG[3:0] A | B', 'REG[3:0] A \\| B', 'trailing\\\nnext'])(
     'preserves cell text without accumulating escapes: %s',
