@@ -388,13 +388,13 @@ describe('settings', () => {
     expect(normalized.inlineCodeRenderingEnabled).toBe(true);
   });
 
-  it('defaults Markdown clipboard syntax to enabled and preserves explicit choices', () => {
-    expect(DEFAULT_APP_PREFERENCES.copyMarkdownSyntaxEnabled).toBe(true);
-    expect(normalizeAppPreferences({}).copyMarkdownSyntaxEnabled).toBe(true);
+  it('defaults ordinary copy to visible text and preserves explicit choices', () => {
+    expect(DEFAULT_APP_PREFERENCES.copyMarkdownSyntaxEnabled).toBe(false);
+    expect(normalizeAppPreferences({}).copyMarkdownSyntaxEnabled).toBe(false);
     expect(
       normalizeAppPreferences({ copyMarkdownSyntaxEnabled: 'false' as never })
         .copyMarkdownSyntaxEnabled,
-    ).toBe(true);
+    ).toBe(false);
     expect(
       normalizeAppPreferences({ copyMarkdownSyntaxEnabled: false }).copyMarkdownSyntaxEnabled,
     ).toBe(false);

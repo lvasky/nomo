@@ -1,3 +1,4 @@
+import { serializeSourceChange } from './sourcePreservation';
 import { requiresHtmlCommand, strictMarkdownPaste } from './strictMarkdown';
 import { tableSourcePlugin } from './tableSource';
 import { serializeClipboardText } from './markdownSerialization';
@@ -910,19 +911,20 @@ export class ProseMirrorEditorCore implements EditorCore {
     }
   }
 
-  getClipboardPayload(): EditorClipboardPayload | null {
+  getClipboardPayload(options: { format?: 'plain' | 'markdown' } = {}): EditorClipboardPayload | null {
     this.assertActive();
     if (!this.view || this.view.state.selection.empty) return null;
     const serialized = this.view.serializeForClipboard(this.view.state.selection.content());
     return {
-      text: serialized.text,
+      text: options.format === 'plain' ? serializeClipboardText(this.view.state.selection.content())
+        : options.format === 'markdown' ? this.serializeClipboardText(this.view.state.selection.content(), true) : serialized.text,
       html: serialized.dom.innerHTML,
     };
   }
 
-  private serializeClipboardText(slice: Slice): string {
+  private serializeClipboardText(slice: Slice, markdown = this.runtime.copyMarkdownSyntaxEnabled): string {
     const plainText = serializeClipboardText(slice);
-    if (!this.runtime.copyMarkdownSyntaxEnabled || !this.view) {
+    if (!markdown || !this.view) {
       return plainText;
     }
 
@@ -985,19 +987,19 @@ export class ProseMirrorEditorCore implements EditorCore {
     }
 
     const text = input.text ?? '';
-    if (text && replaceInlineSourceCodeText(this.view.state, text)) {
-      return this.insertPlainClipboardText(text);
+    if (this.view.state.selection.$from.parent.type.spec.code || (text && replaceInlineSourceCodeText(this.view.state, text))) {
+      const template = document.createElement('template');
+      template.innerHTML = input.html ?? '';
+      const literal = text || template.content.textContent || '';
+      return literal ? this.insertPlainClipboardText(literal) : { status: 'rejected', reason: 'no-text' };
     }
     if (options.mode === 'plain') {
       return text ? this.insertPlainClipboardText(text) : { status: 'rejected', reason: 'no-text' };
     }
 
-    if (input.html && isInTable(this.view.state)) {
-      const template = document.createElement('template');
-      template.innerHTML = input.html;
-      const parser = this.view.someProp('clipboardParser') ?? this.view.someProp('domParser') ?? DOMParser.fromSchema(schema);
-      const slice = parser.parseSlice(template.content, { preserveWhitespace: true, context: this.view.state.selection.$from });
-      if (this.isTableClipboardSlice(slice)) return this.insertHtmlClipboard(input.html, text);
+    if (input.html) {
+      const result = this.insertHtmlClipboard(input.html, text);
+      if (result.status === 'inserted' || !text) return result;
     }
 
     const listShortcut = text ? this.insertListClipboardShortcut(text) : null;
@@ -1083,7 +1085,7 @@ export class ProseMirrorEditorCore implements EditorCore {
       event.preventDefault();
       return true;
     }
-    if (codeText && replaceInlineSourceCodeText(this.view.state, codeText)) {
+    if (this.view.state.selection.$from.parent.type.spec.code || (codeText && replaceInlineSourceCodeText(this.view.state, codeText))) {
       const result = this.insertPlainClipboardText(codeText);
       const context = this.htmlPasteContexts.get(event);
       if (context) context.result = result;
@@ -1097,7 +1099,7 @@ export class ProseMirrorEditorCore implements EditorCore {
       event.preventDefault();
       return true;
     }
-    if (!plain && text && this.insertListClipboardShortcut(text)) {
+    if (!plain && !html && text && this.insertListClipboardShortcut(text)) {
       event.preventDefault();
       return true;
     }
@@ -1117,7 +1119,7 @@ export class ProseMirrorEditorCore implements EditorCore {
     if (!clipboard) return false;
 
     if (!plain) {
-      if (!text || classifyClipboardMarkdown(text).kind === 'plain') {
+      if (html || !text || classifyClipboardMarkdown(text).kind === 'plain') {
         return false;
       }
     }
@@ -1144,8 +1146,12 @@ export class ProseMirrorEditorCore implements EditorCore {
       this.view.dispatch(tr.setMeta(plainTextPasteMeta, true).scrollIntoView());
       return { status: 'inserted', format: 'plain' };
     }
-    const codeTransaction = replaceInlineSourceCodeText(state, text);
-    const transaction = (codeTransaction ?? state.tr.replaceSelection(createPlainTextSlice(text, state.selection.$from)))
+    const { $from, $to } = state.selection;
+    const selectedLinkMarks = !state.selection.empty && $from.sameParent($to)
+      ? ($from.nodeAfter?.marks ?? []).filter((mark) => mark.type.name === 'link' && mark.isInSet($to.nodeBefore?.marks ?? [])) : undefined;
+    const codeTransaction = state.selection.$from.parent.type.spec.code && state.selection.$from.sameParent(state.selection.$to)
+      ? state.tr.insertText(text.replace(/\r\n?/g, '\n')) : replaceInlineSourceCodeText(state, text);
+    const transaction = (codeTransaction ?? state.tr.replaceSelection(createPlainTextSlice(text, state.selection.$from, selectedLinkMarks)))
       .setMeta(plainTextPasteMeta, true)
       .scrollIntoView();
     this.view.dispatch(transaction);
@@ -1965,14 +1971,15 @@ export class ProseMirrorEditorCore implements EditorCore {
 
     this.clearPendingMarkdownSync();
 
+    const preservedSource = serializeSourceChange(removeEmptyTrailingParagraph(pendingDoc), this.originalDoc, this.originalMarkdown, this.runtime.strictMarkdown);
     let serializedMarkdown = pendingDoc.eq(this.originalDoc)
       ? this.originalMarkdown
       : pendingDoc.content.eq(this.originalDoc.content)
         ? `${String(pendingDoc.attrs.frontMatterPrefix ?? '')}${splitFrontMatter(this.originalMarkdown).body}`
-        : serializeMarkdown(removeEmptyTrailingParagraph(pendingDoc), { strictMarkdown: this.runtime.strictMarkdown });
+        : preservedSource ?? serializeMarkdown(removeEmptyTrailingParagraph(pendingDoc), { strictMarkdown: this.runtime.strictMarkdown });
     // Keep the file's existing newline convention, including its final newline.
     const newline = this.originalMarkdown.includes('\r\n') ? '\r\n' : '\n';
-    serializedMarkdown = serializedMarkdown.replace(/\r?\n/g, newline);
+    if (preservedSource === null) serializedMarkdown = serializedMarkdown.replace(/\r?\n/g, newline);
     if (serializedMarkdown && this.originalMarkdown.endsWith('\n') && !serializedMarkdown.endsWith('\n')) serializedMarkdown += newline;
     // 保留 Markdown 字符串层的 TOC 规范化，但不再因此重建 EditorState。
     // 语义视图中的 toc_block 已由 tocSyncPlugin 原位同步，历史栈保持不变。

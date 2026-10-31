@@ -204,7 +204,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   codeBlockIndent: 'spaces-2',
   inlineCodeRenderingEnabled: true,
   strictMarkdown: true,
-  copyMarkdownSyntaxEnabled: true,
+  copyMarkdownSyntaxEnabled: false,
   quickInsertEnabled: true,
   quickInsertTrigger: DEFAULT_QUICK_INSERT_TRIGGER,
   markdownLintEnabled: false,

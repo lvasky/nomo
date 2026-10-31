@@ -1,4 +1,5 @@
 {
+  "copyAsMarkdown": "複製為 Markdown",
   "strictMarkdown": "嚴格 Markdown",
   "strictMarkdownDescription": "使用相容 GitHub、GitLab 與 VS Code 的 Markdown，避免貼上和編輯自動產生 HTML。保留原有及手動輸入的 HTML；表格內換行使用 <br>。",
   "typographyEnabled": "精細排版",

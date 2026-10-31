@@ -47,6 +47,7 @@ jobs:
           New-Item -ItemType Directory -Force artifacts | Out-Null
           pnpm exec vitest run `
             src/lib/editor-core/strictMarkdown.test.ts `
+            src/lib/editor-core/clipboardContract.test.ts `
             src/lib/editor-core/InlineSourceCodec.test.ts `
             src/lib/editor-core/tableMarkdown.test.ts `
             src/lib/editor-core/tableCommands.test.ts `
@@ -91,6 +92,10 @@ jobs:
           ## Windows x64 严格 Markdown 版本
 
           - 下载 x64-setup.exe 安装，或解压 x64.zip 后运行 Nomo.exe。
+          - 新增“复制为 Markdown”（Ctrl+Shift+C）；普通复制默认可见文字并保留显式偏好，剪贴板同时提供文本与 HTML。
+          - 普通粘贴优先转换 HTML，纯文本粘贴和代码区域保持字面值。
+          - 根据行首、表格、代码和链接上下文最小转义；PRI->Stage、A > B、REG[3:0] 不添加无意义转义。
+          - 五轮复制、粘贴、保存和重开验收；未改动的顶层块保留原始字节与换行。
           - 严格 Markdown 默认开启，以 GFM 为基础兼容 GitHub、GitLab 和 VS Code 预览。
           - 保留原有及手动输入的 HTML；表格单元格内换行允许使用 <br>。
           - 未编辑的表格保留原始格式；单元格编辑和列对齐尽量减少 Git 差异。

@@ -18,7 +18,7 @@ import { serializeCallout } from './callout/calloutSerializer';
 import { TOC_START_MARKER, TOC_END_MARKER } from '../toc/tocMarkers';
 import { escapeHtmlAttr } from './markdownTokenizer';
 import { serializeMarkdownLinkDestination, serializeMarkdownLinkTitle } from './link';
-import { analyzeInlineSourceText, escapeInlineSourceLiteral, isInlineSourceText, projectInlineSource, readTaskListMarker } from './InlineSourceCodec';
+import { analyzeInlineSourceText, escapeInlineSourceLiteral, escapeLiteralBlockSyntax, isInlineSourceText, projectInlineSource, readTaskListMarker } from './InlineSourceCodec';
 
 const paragraphSyntaxRanges = new WeakMap<MarkdownSerializerState, Array<{ from: number; to: number }>>();
 
@@ -222,7 +222,7 @@ const tableMarkdownSerializer = new MarkdownSerializer(
         }
         return;
       }
-      let escaped = escapeMarkdownTextWithoutManualInlineMarkers(node.text ?? '');
+      let escaped = escapeInlineSourceLiteral(node.text ?? '', { linkLabel: node.marks.some((mark) => mark.type.name === 'link') });
       if (containsLiteralDisplayMathSyntax(parent)) {
         escaped = escaped.replace(/(?<!\\)\$/g, '\\$');
       }
@@ -332,7 +332,7 @@ const tableCellMarkdownSerializer = new MarkdownSerializer(
     text(state, node) {
       const text = node.text ?? '';
       state.text(
-        isInlineSourceText(node) ? text : escapeMarkdownTextWithoutManualInlineMarkers(text, false),
+        isInlineSourceText(node) ? text : escapeInlineSourceLiteral(text, { linkLabel: node.marks.some((mark) => mark.type.name === 'link') }),
         false,
       );
     },
@@ -801,7 +801,13 @@ function serializeTableRow(row: ProseMirrorNode, columnCount: number, strictMark
 function serializeTableCell(cell: ProseMirrorNode, strictMarkdown = false): string {
   // 表格分隔符只在最终输出时转义，不能删除正文或代码中的反斜杠。
   const options = { tightLists: false, strictMarkdown };
-  return tableCellMarkdownSerializer.serialize(cell, options).replace(/\n/g, ' ').replace(/\|/g, '\\|').trim();
+  const source = tableCellMarkdownSerializer.serialize(cell, options).replace(/\n/g, ' ');
+  const code = analyzeInlineSourceText(source).spans.filter((span) => span.type === 'code');
+  return source.replace(/(\\*)\|/g, (_match, slashes: string, offset: number) => {
+    const pipe = offset + slashes.length;
+    const inCode = code.some((span) => pipe >= span.openFrom && pipe < span.closeTo);
+    return (slashes.length % 2 === 1 && !inCode ? slashes.slice(1) : slashes) + '\\|';
+  }).trim();
 }
 
 function splitTaskParagraph(
@@ -824,29 +830,6 @@ function splitTaskParagraph(
   };
 }
 
-function escapeMarkdownTextWithoutManualInlineMarkers(text: string, escapePipes = true): string {
-  let escaped = text.replace(escapePipes ? /[`\\[\]|_]/g : /[`\\[\]_]/g, (match, index) =>
-    match === '_' &&
-    index > 0 &&
-    index + 1 < text.length &&
-    /\w/.test(text[index - 1] ?? '') &&
-    /\w/.test(text[index + 1] ?? '')
-      ? match
-      : `\\${match}`,
-  );
-
-  if (/(?:\*{1,3})(?=\S)[\s\S]*?\S\*{1,3}/.test(escaped)) {
-    escaped = escaped.replace(/(?<!\\)\*/g, '\\*');
-  }
-  if (/~~(?=\S)[\s\S]*?\S~~/.test(escaped)) {
-    escaped = escaped.replace(/(?<!\\)~/g, '\\~');
-  }
-  if (/\$\$(?:[\s\S]*?\S)?\$\$|\$(?!\$)(?=\S)[^\n]*?\S\$(?!\$)/.test(escaped)) {
-    escaped = escaped.replace(/(?<!\\)\$/g, '\\$');
-  }
-  escaped = escaped.replace(/(?<!\\)<(?=\/?[A-Za-z][^>]*>)/g, '\\<');
-  return escaped;
-}
 
 function renderParagraphInline(state: MarkdownSerializerState, node: ProseMirrorNode): void {
   // 先输出容器的列表/引用前缀，只保护段落正文，不能把真实容器语法转成字面文本。
@@ -880,7 +863,7 @@ function renderParagraphInline(state: MarkdownSerializerState, node: ProseMirror
     }
     return prefix + escapeMarkdownBlockStart(body);
   }).join('\n');
-  output.out = output.out.slice(0, from) + content;
+  output.out = output.out.slice(0, from) + escapeLiteralBlockSyntax(content);
 }
 
 function escapeMarkdownBlockStart(text: string): string {

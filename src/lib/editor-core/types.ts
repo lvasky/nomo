@@ -278,7 +278,7 @@ export interface EditorCore {
   blur(): void;
   getActiveLink(): EditorLinkSnapshot | null;
   getSelectionAnchorRect(): EditorAnchorRect | null;
-  getClipboardPayload(): EditorClipboardPayload | null;
+  getClipboardPayload(options?: { format?: 'plain' | 'markdown' }): EditorClipboardPayload | null;
   pasteClipboard(input: EditorPasteInput, options?: { mode?: EditorPasteMode }): EditorPasteResult;
   pasteClipboardText(text: string): boolean;
   pasteClipboardHtml(html: string): boolean;

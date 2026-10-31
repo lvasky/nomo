@@ -52,6 +52,7 @@ SmartScreen or Gatekeeper may prompt on first launch; download from this project
 
 - **Markdown editing**: Live preview, source and split modes, with `/` for quick insertion.
 - **Strict Markdown**: Enabled by default for GFM compatibility with GitHub, GitLab and VS Code previews. Pasting does not add HTML styling; existing and handwritten HTML is retained, and table cell breaks use `<br>`. Unchanged tables keep their source formatting, while cell edits minimize Git diffs. Disable this option in editor settings to use HTML formatting features.
+- **Clipboard**: Ordinary copy defaults to visible text with HTML, preserving explicit preferences. Use `Ctrl+Shift+C` to copy as Markdown and `Ctrl+Shift+V` to paste literal text. Ordinary paste prefers HTML conversion. Escaping depends on context, code remains literal, and unchanged top-level blocks retain their source syntax and line endings.
 - **Rich content**: Tables, syntax highlighting, math formulas and Mermaid diagrams.
 - **File management**: Type to locate files in the explorer, work in multiple tabs and edit large TXT / JSON files in segments.
 - **Save and restore**: Optional autosave and local Markdown snapshots, plus workspace and reading position restoration.

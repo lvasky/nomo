@@ -112,12 +112,85 @@ export function inlineFormatDelimiters(
   return { open, close };
 }
 
-/** 纯文本粘贴显式转义，避免在新模型里意外变成 Markdown 格式。 */
-export function escapeInlineSourceLiteral(text: string): string {
-  return text.replace(
-    /[\\`*_~^<\[\]$]|&(?=#(?:x[\da-f]+|\d+);|[a-z][a-z\d]+;)/gi,
-    (character) => `\\${character}`,
-  );
+/** Escape only syntax recognized by the same inline parser used by the editor.
+ * Inserted escapes carry no source position, so subsequent passes cannot escape them again.
+ * Re-parsing also protects syntax exposed by making a code span or HTML tag literal.
+ */
+export function literalEscapePositions(text: string, options: { linkLabel?: boolean; trailingMarkup?: boolean; blockStart?: boolean } = {}): Set<number> {
+  const escaped = new Set<number>();
+  if (options.linkLabel) {
+    const opens: number[] = [];
+    for (let i = 0; i < text.length; i++) {
+      if (text[i] === '[') opens.push(i);
+      else if (text[i] === ']' && opens.pop() === undefined) escaped.add(i);
+    }
+    for (const index of opens) escaped.add(index);
+  }
+  if (options.blockStart) {
+    const fence = /^ {0,3}(\${2,})/.exec(text);
+    if (fence) for (let i = fence[0].length - fence[1].length; i < fence[0].length; i++) escaped.add(i);
+  }
+  if (options.trailingMarkup) {
+    for (let i = text.length - 1; i >= 0 && text[i] === '\\'; i--) escaped.add(i);
+  }
+  if (!escaped.size && !/[\\`*_~^<\[$&]/.test(text)) return escaped;
+  for (const match of text.matchAll(/(?:^|\n)( {0,3})\[[ xX]\](?=\s|$)/g)) {
+    escaped.add(match.index + match[0].indexOf('['));
+  }
+  for (;;) {
+    let source = '';
+    const origins: number[] = [];
+    for (let i = 0; i < text.length; i++) {
+      if (escaped.has(i)) { source += '\\'; origins.push(-1); }
+      source += text[i]; origins.push(i);
+    }
+    let changed = false;
+    for (const token of tokenizer.parseInline(source, {})[0]?.children ?? []) {
+      if (['text', 'softbreak', 'link_close'].includes(token.type)) continue;
+      const range = inlineTokenSourceRange(token);
+      if (!range) continue;
+      if (token.type === 'link_open' && !['[', '<'].includes(source[range.from])) continue;
+      for (let i = range.from; i < Math.max(range.to, range.from + 1); i++) {
+        const original = origins[i];
+        if (original == null || original < 0 || escaped.has(original)) continue;
+        if (!/[\\`*_~^<\[$&]/.test(source[i])) continue;
+        escaped.add(original); changed = true; break;
+      }
+    }
+    if (!changed) return escaped;
+  }
+}
+
+function escapeLiteralAt(text: string, escaped: Set<number>): string {
+  let result = '';
+  for (let i = 0; i < text.length; i++) result += (escaped.has(i) ? '\\' : '') + text[i];
+  return result;
+}
+
+export function escapeInlineSourceLiteral(text: string, options: { linkLabel?: boolean; trailingMarkup?: boolean; blockStart?: boolean } = {}): string {
+  return escapeLiteralAt(text, literalEscapePositions(text, options));
+}
+
+/** Protect block-only syntax while serializing a paragraph that must stay literal. */
+export function escapeLiteralBlockSyntax(source: string): string {
+  if (!source.includes('|') && !source.includes('$$')) return source;
+  const lines = source.split('\n');
+  const starts = [0];
+  for (let i = 0; i < source.length; i++) if (source[i] === '\n') starts.push(i + 1);
+  const code = analyzeInlineSourceText(source).spans.filter((span) => span.type === 'code');
+  const protectedLine = (line: number) => code.some((span) => starts[line] >= span.openFrom && starts[line] < span.closeTo);
+  for (const token of tokenizer.parse(source, {})) {
+    if (token.type === 'table_open' && token.map) {
+      const separator = token.map[0] + 1;
+      if (!protectedLine(separator)) lines[separator] = lines[separator].replace(/^(\s*)([|:-])/, '$1\\$2');
+    }
+  }
+  for (let line = 0; line < lines.length; line++) {
+    if (!protectedLine(line) && /^\s*\${2,}(?:\s|$)/.test(lines[line])) {
+      lines[line] = lines[line].replace(/^(\s*)(\$+)/, (_match, indent: string, dollars: string) => indent + dollars.replace(/\$/g, '\\$'));
+    }
+  }
+  return lines.join('\n');
 }
 
 export function analyzeInlineSource(block: ProseMirrorNode): InlineSourceAnalysis {
@@ -506,15 +579,8 @@ function materializeSourceNode(
     if (child.isText) {
       const raw = child.text!;
       const literal = !isInlineSourceText(child) && !desired.includes('code');
+      const escaped = literal ? literalEscapePositions(raw, { linkLabel: linkMarks.length > 0, trailingMarkup: index + 1 < doc.childCount, blockStart: index === 0 || doc.child(index - 1).type.name === 'hard_break' }) : new Set<number>();
       if (maps) {
-        const escaped = literal
-          ? new Set(
-              Array.from(
-                raw.matchAll(/[\\`*_~^<\[\]$]|&(?=#(?:x[\da-f]+|\d+);|[a-z][a-z\d]+;)/gi),
-                (match) => match.index,
-              ),
-            )
-          : new Set<number>();
         let inserted = 0;
         for (let i = 0; i < raw.length; i++) {
           const oldPosition = oldContent + offset + i;
@@ -526,7 +592,7 @@ function materializeSourceNode(
             newContent + output + i + inserted + 1;
         }
       }
-      append(literal ? escapeInlineSourceLiteral(raw) : raw, child.marks);
+      append(literal ? escapeLiteralAt(raw, escaped) : raw, child.marks);
     } else {
       // 原子节点没有可承载定界符的文字，保留其合法语义 marks，避免 HTML 导入丢格式。
       children.push(child);

@@ -204,7 +204,7 @@ describe('inline source codec', () => {
       code,
     ]);
     const converted = materializeInlineSource(doc);
-    expect(converted.firstChild!.textContent).toBe('**old** \\* literal');
+    expect(converted.firstChild!.textContent).toBe('**old** * literal');
     expect(converted.child(1)).toBe(code);
     expect(materializeInlineSource(converted)).toBe(converted);
     expect(projectInlineSource(converted).firstChild!.textContent).toBe('old * literal');
@@ -337,11 +337,11 @@ describe('inline source codec', () => {
       schema.nodes.paragraph.create(null, schema.text('* &amp;')),
     );
     const result = materializeInlineSourceWithMapping(original);
-    expect(result.doc.textContent).toBe('\\* \\&amp;');
+    expect(result.doc.textContent).toBe('* \\&amp;');
     expect(result.mapPosition(1, -1)).toBe(1);
-    expect(result.mapPosition(1, 1)).toBe(2);
-    expect(result.mapPosition(2, -1)).toBe(3);
-    expect(result.mapPosition(3, 1)).toBe(5);
+    expect(result.mapPosition(1, 1)).toBe(1);
+    expect(result.mapPosition(2, -1)).toBe(2);
+    expect(result.mapPosition(3, 1)).toBe(4);
     const repeated = materializeInlineSourceWithMapping(result.doc);
     expect(repeated.doc).toBe(result.doc);
     for (let pos = 0; pos <= result.doc.content.size; pos++)

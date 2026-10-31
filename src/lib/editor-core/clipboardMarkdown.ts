@@ -2,7 +2,7 @@ import { Fragment, Slice, type Mark, type Node as ProseMirrorNode, type Resolved
 import type { Transaction } from 'prosemirror-state';
 import { parseMarkdown } from './markdown';
 import { schema } from './schema';
-import { projectInlineSource, escapeInlineSourceLiteral } from './InlineSourceCodec';
+import { projectInlineSource, escapeInlineSourceLiteral, escapeLiteralBlockSyntax } from './InlineSourceCodec';
 
 export const plainTextPasteMeta = 'nomoPlainTextPaste';
 
@@ -28,21 +28,21 @@ export function classifyClipboardMarkdown(text: string): ClipboardMarkdownClassi
     : { kind: 'markdown', doc: markdownDoc };
 }
 
-export function createPlainTextSlice(text: string, $context: ResolvedPos): Slice {
+export function createPlainTextSlice(text: string, $context: ResolvedPos, inheritedMarks?: readonly Mark[]): Slice {
   const literal = normalizeClipboardText(text);
   const richContext = Array.from({ length: $context.depth }, (_, i) => $context.node(i + 1))
     .some((node) => node.type.spec.code || node.type.name === 'html_block');
   const marks = richContext ? $context.marks() : [
-    ...$context.marks().filter((mark) => mark.type.name === 'link'),
+    ...(inheritedMarks ?? $context.marks()).filter((mark) => mark.type.name === 'link'),
     schema.marks.inline_source.create(),
   ];
   return Slice.maxOpen(Fragment.fromArray(createPlainTextBlocks(
-    richContext ? literal : escapePlainMarkdownText(literal), marks,
+    richContext ? literal : escapePlainMarkdownText(literal, marks.some((mark) => mark.type.name === 'link')), marks,
   )));
 }
 
-function escapePlainMarkdownText(text: string): string {
-  return escapeInlineSourceLiteral(text).replace(/\|/g, '\\|').replace(
+function escapePlainMarkdownText(text: string, linkLabel: boolean): string {
+  return escapeLiteralBlockSyntax(escapeInlineSourceLiteral(text, { linkLabel })).replace(
     /^(\s{0,3})(#{1,6}(?=\s|$)|[-+](?=\s)|\d+[.)](?=\s)|-{3,}\s*$)/gm,
     (_match, indent: string, marker: string) => /^\d/.test(marker)
       ? `${indent}${marker.replace(/[.)]/, '\\$&')}` : `${indent}\\${marker}`,

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { EditorView as CodeMirrorView } from '@codemirror/view';
   import { captureExportAppearance, captureExportSnapshot } from './services/export/snapshot';
   import { createWritingStatsController } from './services/writingStatsController';
   import { onDestroy, onMount, tick } from 'svelte';
@@ -3253,7 +3254,8 @@
     const disabled = readonlyDocumentMode;
     return [
       { label: t.cut(), icon: 'cut', disabled, shortcut: 'Ctrl+X', action: cutSelection },
-      { label: t.copy(), icon: 'copy', shortcut: 'Ctrl+C', action: copySelection },
+      { label: t.copy(), icon: 'copy', shortcut: 'Ctrl+C', action: () => copySelection() },
+      { label: t.copyAsMarkdown(), icon: 'copy', shortcut: 'Ctrl+Shift+C', action: () => copySelection(true) },
       {
         label: t.paste(),
         icon: 'paste',
@@ -3528,8 +3530,24 @@
     return { label: '', separator: true };
   }
 
-  async function copySelection() {
-    const payload = editor.getClipboardPayload();
+  async function copySelection(asMarkdown = false) {
+    const codeHost = document.activeElement?.closest('.cm-editor');
+    if (asMarkdown && getActiveEditorMode() !== 'source' && codeHost instanceof HTMLElement) {
+      const codeView = CodeMirrorView.findFromDOM(codeHost);
+      const text = codeView?.state.selection.ranges.map((range) => codeView.state.sliceDoc(range.from, range.to)).join('\n');
+      if (!text) return;
+      const pre = document.createElement('pre');
+      const code = pre.appendChild(document.createElement('code'));
+      code.textContent = text;
+      try { await writeEditorClipboard({ text, html: pre.outerHTML }, desktopEnabled); }
+      catch { statusMessage = t.copyFailed(); }
+      return;
+    }
+    if (asMarkdown && getActiveEditorMode() === 'source' && sourceEditor) {
+      await copyPlainText(sourceEditor.getSelectedMarkdown());
+      return;
+    }
+    const payload = editor.getClipboardPayload(asMarkdown ? { format: 'markdown' } : undefined);
     if (!payload) return;
     try {
       await writeEditorClipboard(payload, desktopEnabled);
@@ -7673,6 +7691,12 @@
     }
     if (installedReleaseNotes && installedReleaseNotesCanOpen) return;
     if (exitRequestId !== null || workspaceInteractionDisabled) return;
+    if ((event.ctrlKey || event.metaKey) && event.shiftKey && !event.altKey && event.key.toLowerCase() === 'c'
+      && event.target instanceof HTMLElement && event.target.closest('.ProseMirror, .cm-editor')) {
+      event.preventDefault();
+      void copySelection(true);
+      return;
+    }
     handleGlobalAppShortcut(event, commandHandlers, shortcutPreferences);
   }
 

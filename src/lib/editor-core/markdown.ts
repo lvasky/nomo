@@ -350,6 +350,11 @@ tableMarkdownParserWithHandlers.tokenHandlers.html_inline = (
   tok: Token,
 ) => {
   const content = tok.content;
+  const appendHtmlSource = () => {
+    state.openMark(schema.marks.inline_source.create({ literal: true }));
+    state.addText(content);
+    state.closeMark(schema.marks.inline_source);
+  };
 
   if (isMarkdownComment(content) && !isReservedTocComment(content)) {
     state.openNode(schema.nodes.comment_inline, {
@@ -362,7 +367,7 @@ tableMarkdownParserWithHandlers.tokenHandlers.html_inline = (
   const tagMatch = /^<\/?([a-zA-Z][a-zA-Z0-9]*)/.exec(content);
   if (!tagMatch) {
     // 注释、PI 等 — 原样输出
-    state.addText(content);
+    appendHtmlSource();
     return;
   }
 
@@ -383,7 +388,7 @@ tableMarkdownParserWithHandlers.tokenHandlers.html_inline = (
     if (attrs) {
       state.openNode(schema.nodes.html_anchor, attrs);
       state.closeNode();
-    } else state.addText(content);
+    } else appendHtmlSource();
     return;
   }
 
@@ -400,7 +405,7 @@ tableMarkdownParserWithHandlers.tokenHandlers.html_inline = (
       }
     } else {
       // 无匹配开标签 — 原样输出
-      state.addText(content);
+      appendHtmlSource();
     }
     return;
   }
@@ -413,7 +418,7 @@ tableMarkdownParserWithHandlers.tokenHandlers.html_inline = (
       const linkAttrs = getHtmlAnchorAttrs(content);
       attrs = linkAttrs ? { ...linkAttrs } : null;
       if (!attrs) {
-        state.addText(content);
+        appendHtmlSource();
         return;
       }
     }
@@ -422,7 +427,7 @@ tableMarkdownParserWithHandlers.tokenHandlers.html_inline = (
     state.openMark(mark);
   } else {
     // 不支持的内联标签（如 span）— 保留原始 HTML 文本
-    state.addText(content);
+    appendHtmlSource();
   }
 };
 
@@ -488,7 +493,7 @@ tableMarkdownParserWithHandlers.tokenHandlers.inline = (state, token) => {
     }
     if (event.token.type === 'text_special' && event.token.info === 'entity') {
       // 实体保持原来的显示字符，六类语法字符则用真实反斜杠保护其字面含义。
-      appendSource(escapeInlineSourceLiteral(event.token.content));
+      appendSource(event.token.content.replace(/[\\`*_~^<\[\]$]/g, (char) => `\\${char}`));
     } else {
       tableMarkdownParserWithHandlers.tokenHandlers[event.token.type](state, event.token);
     }

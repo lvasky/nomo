@@ -1,4 +1,5 @@
 {
+  "copyAsMarkdown": "Copy as Markdown",
   "strictMarkdown": "Strict Markdown",
   "strictMarkdownDescription": "Use Markdown compatible with GitHub, GitLab and VS Code. Avoid generating HTML when pasting or editing. Keep existing and manually entered HTML; use <br> for line breaks in table cells.",
   "typographyEnabled": "Fine typography",

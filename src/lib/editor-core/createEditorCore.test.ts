@@ -2052,14 +2052,14 @@ describe('createEditorCore', () => {
     editor.destroy();
   });
 
-  it('prefers detected Markdown text over HTML and otherwise keeps HTML priority', () => {
+  it('prefers available HTML over Markdown-looking text for ordinary paste', () => {
     const markdownTarget = document.createElement('div');
     const markdownEditor = createEditorCore({ markdown: '', target: markdownTarget });
     const markdownView = (markdownEditor as unknown as { view: EditorView }).view;
     expect(markdownEditor.pasteClipboard({ text: '# 文本', html: '<p>HTML</p>' })).toMatchObject({
-      format: 'markdown',
+      format: 'html',
     });
-    expect(markdownView.state.doc.firstChild?.type.name).toBe('heading');
+    expect(markdownView.state.doc.firstChild?.type.name).toBe('paragraph');
     markdownEditor.destroy();
 
     const htmlTarget = document.createElement('div');
@@ -2108,7 +2108,7 @@ describe('createEditorCore', () => {
     ).toMatchObject({ format: 'plain' });
     expect(projectInlineSource(view.state.doc).textContent).toBe('**重点** $x$ ~~删除~~');
     expect(findFirstNode(view.state.doc, 'paragraph').node.firstChild?.marks.map((mark) => mark.type.name)).toEqual(['inline_source']);
-    expect(editor.flushMarkdown()).toBe('\\*\\*重点\\*\\* \\$x\\$ \\~\\~删除\\~\\~');
+    expect(editor.flushMarkdown()).toBe('\\*\\*重点\\*\\* \\$x$ \\~\\~删除\\~\\~');
     expect(projectInlineSource(parseMarkdown(editor.getMarkdown())).textContent).toBe('**重点** $x$ ~~删除~~');
     editor.destroy();
   });
@@ -2180,10 +2180,10 @@ describe('createEditorCore', () => {
     const view = (editor as unknown as { view: EditorView }).view;
     editor.pasteClipboard({ text }, { mode: 'plain' });
 
-    const pastedText = view.state.doc.textContent;
+    const pastedText = projectInlineSource(view.state.doc).textContent;
     const reopened = parseMarkdown(editor.flushMarkdown());
     expect(reopened.firstChild?.type.name).toBe('paragraph');
-    expect(reopened.textContent).toBe(pastedText);
+    expect(projectInlineSource(reopened).textContent).toBe(pastedText);
     editor.destroy();
   });
 
