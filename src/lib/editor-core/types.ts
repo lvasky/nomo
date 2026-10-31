@@ -141,7 +141,7 @@ export interface EditorPasteInput {
 
 export type EditorPasteResult =
   | { status: 'inserted'; format: 'markdown' | 'html' | 'plain' }
-  | { status: 'rejected'; reason: 'readonly' | 'no-text' };
+  | { status: 'rejected'; reason: 'readonly' | 'no-text' | 'unsupported-table' };
 
 export type EditorCommand =
   | { type: 'insertText'; text: string }

@@ -285,6 +285,35 @@ export function normalizeTableRowChange(
   }
 }
 
+/** Excel grid expansion must remain a rectangular GFM table. Text is untouched. */
+export function normalizePastedMarkdownTable(
+  tr: Transaction,
+  tableStart: number,
+  source: ProseMirrorNode,
+): void {
+  const table = tr.doc.nodeAt(tableStart - 1);
+  if (table?.type !== schema.nodes.table) return;
+  let rowOffset = 0;
+  table.forEach((row, _offset, rowIndex) => {
+    let cellOffset = 0;
+    row.forEach((cell, _cellOffset, column) => {
+      const type = rowIndex === 0 ? schema.nodes.table_header : schema.nodes.table_cell;
+      const original = source.firstChild?.maybeChild(column);
+      const align = original ? original.attrs.align :
+        table.firstChild?.maybeChild(column)?.attrs.align ?? null;
+      // Never flatten merged cells or discard their content to force Markdown.
+      // The transaction guard rejects any remaining unsupported structure.
+      if (cell.attrs.colspan === 1 && cell.attrs.rowspan === 1 &&
+        (cell.type !== type || cell.attrs.align !== align || cell.attrs.colwidth !== null)) {
+        tr.setNodeMarkup(tableStart + rowOffset + 1 + cellOffset, type,
+          { ...cell.attrs, align, colwidth: null });
+      }
+      cellOffset += cell.nodeSize;
+    });
+    rowOffset += row.nodeSize;
+  });
+}
+
 function normalizeInsertedTableColumn(
   tr: Transaction,
   tableStart: number,

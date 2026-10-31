@@ -11,6 +11,7 @@ import {
   type ResolvedPos,
 } from 'prosemirror-model';
 import { preserveTableSource } from './tableSource';
+import { isMarkdownTable, UnsupportedMarkdownTableError } from './tableMarkdownSafety';
 import { schema, type TableColumnAlignment } from './schema';
 import { serializeHtmlBlock, serializeHtmlInlineContent } from './html/pmToHtml';
 import { serializeHtmlAnchorOpen } from './html/htmlAnchor';
@@ -731,7 +732,8 @@ function serializeTable(table: ProseMirrorNode, strictMarkdown = false): string 
   if (rows.length === 0) return '';
   const preserved = preserveTableSource(table, (cell) => serializeTableCell(cell, strictMarkdown));
   if (preserved !== null) return preserved;
-  if (requiresHtmlTable(rows, strictMarkdown)) return serializeHtmlTable(table);
+  // Never silently rewrite Markdown source into a semantic HTML table.
+  if (!isMarkdownTable(table)) throw new UnsupportedMarkdownTableError();
 
   const columnCount = Math.max(...rows.map((row) => row.childCount));
   const serializedRows = rows.map((row) => serializeTableRow(row, columnCount, strictMarkdown));
@@ -747,48 +749,6 @@ function serializeTable(table: ProseMirrorNode, strictMarkdown = false): string 
   return [serializedRows[0], separator, ...serializedRows.slice(1)]
     .map((cells) => `| ${cells.join(' | ')} |`)
     .join('\n');
-}
-
-/** GFM 只表示单层矩形、首行表头和逐列统一对齐；其它语义保留 HTML。 */
-function requiresHtmlTable(rows: ProseMirrorNode[], strictMarkdown: boolean): boolean {
-  const width = rows[0].childCount;
-  return rows.some((row, rowIndex) => {
-    if (row.childCount !== width) return true;
-    for (let column = 0; column < row.childCount; column += 1) {
-      const cell = row.child(column);
-      const expectedType = rowIndex === 0 ? schema.nodes.table_header : schema.nodes.table_cell;
-      if (
-        cell.type !== expectedType || cell.attrs.colspan !== 1 || cell.attrs.rowspan !== 1 ||
-        cell.attrs.colwidth !== null || (!strictMarkdown && cell.childCount !== 1) ||
-        cell.attrs.align !== rows[0].child(column).attrs.align
-      ) return true;
-    }
-    return false;
-  });
-}
-
-function serializeHtmlTable(table: ProseMirrorNode): string {
-  const rows: string[] = [];
-  projectInlineSource(table).forEach((row) => {
-    const cells: string[] = [];
-    row.forEach((cell) => {
-      const tag = cell.type === schema.nodes.table_header ? 'th' : 'td';
-      const attrs: string[] = [];
-      for (const name of ['colspan', 'rowspan']) {
-        if (cell.attrs[name] !== 1) attrs.push(name + '="' + escapeHtmlAttr(String(cell.attrs[name])) + '"');
-      }
-      if (cell.attrs.colwidth !== null) {
-        attrs.push('data-colwidth="' + escapeHtmlAttr(cell.attrs.colwidth.join(',')) + '"');
-      }
-      if (cell.attrs.align !== null) attrs.push('data-align="' + escapeHtmlAttr(cell.attrs.align) + '"');
-      const paragraphs: string[] = [];
-      cell.forEach((paragraph) => paragraphs.push('<p>' + serializeHtmlInlineContent(paragraph) + '</p>'));
-      cells.push('<' + tag + (attrs.length ? ' ' + attrs.join(' ') : '') + '>' + paragraphs.join('') + '</' + tag + '>');
-    });
-    rows.push('<tr>' + cells.join('') + '</tr>');
-  });
-  // 单行块让引用/列表/Callout 的 Markdown 前缀保持在表格外，正文换行使用行内 codec。
-  return '<table data-nomo-table="semantic"><tbody>' + rows.join('') + '</tbody></table>';
 }
 
 function serializeTableRow(row: ProseMirrorNode, columnCount: number, strictMarkdown: boolean): string[] {

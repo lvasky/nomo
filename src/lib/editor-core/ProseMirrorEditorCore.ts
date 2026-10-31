@@ -3,6 +3,8 @@ import { requiresHtmlCommand, strictMarkdownPaste } from './strictMarkdown';
 import { tableSourcePlugin } from './tableSource';
 import { createTableClipboardPayload } from './tableActions';
 import { delegateImagePaste } from './imagePasteEvents';
+import { introducesUnsupportedTable } from './tableMarkdownSafety';
+import { t } from '../../app/i18n';
 import { serializeClipboardText } from './markdownSerialization';
 import { typographyPlugin, isTypographyTransaction } from './plugins/typography';
 import { typographyBreaksPlugin } from './nodeViews/TypographyBreakNodeView';
@@ -37,7 +39,7 @@ import {
   toggleList,
   toggleTaskListAtCursor,
 } from './listCommands';
-import { goToNextCell, tableEditing, handlePaste as handleTablePaste, isInTable, TableMap } from 'prosemirror-tables';
+import { goToNextCell, tableEditing, handlePaste as handleTablePaste, isInTable, TableMap, CellSelection, selectedRect } from 'prosemirror-tables';
 import { CodeBlockNodeView } from './nodeViews/CodeBlockNodeView';
 import { CommentBlockNodeView } from './nodeViews/CommentBlockNodeView';
 import { CommentInlineNodeView } from './nodeViews/CommentInlineNodeView';
@@ -135,7 +137,7 @@ import {
   type ClipboardMarkdownClassification,
 } from './clipboardMarkdown';
 import { schema } from './schema';
-import { addTableRowAfter, addTableRowBefore, findTableContext } from './tableCommands';
+import { addTableRowAfter, addTableRowBefore, findTableContext, normalizePastedMarkdownTable } from './tableCommands';
 import { handleTripleClickByDetail } from './tripleClickSelection';
 import { updateTocBlocks } from '../toc/tocService';
 import type {
@@ -206,6 +208,7 @@ export class ProseMirrorEditorCore implements EditorCore {
   private dirty = false;
   private destroyed = false;
   private plainTextPasteRequested = false;
+  private rejectedTableChange = false;
   private plainTextPasteResetTimer: ReturnType<typeof setTimeout> | null = null;
   private readonly htmlPasteContexts = new WeakMap<
     ClipboardEvent,
@@ -992,6 +995,7 @@ export class ProseMirrorEditorCore implements EditorCore {
     options: { mode?: EditorPasteMode } = {},
   ): EditorPasteResult {
     this.assertActive();
+    this.rejectedTableChange = false;
     if (!this.view || !this.isEditable()) {
       return { status: 'rejected', reason: 'readonly' };
     }
@@ -1009,6 +1013,7 @@ export class ProseMirrorEditorCore implements EditorCore {
 
     if (input.html) {
       const result = this.insertHtmlClipboard(input.html, text);
+      if (result.status === 'rejected' && result.reason === 'unsupported-table') return result;
       if (result.status === 'inserted' || !text) return result;
     }
 
@@ -1028,6 +1033,7 @@ export class ProseMirrorEditorCore implements EditorCore {
       if (this.insertMarkdownClipboard(classification)) {
         return { status: 'inserted', format: 'markdown' };
       }
+      if (this.rejectedTableChange) return { status: 'rejected', reason: 'unsupported-table' };
       return this.insertPlainClipboardText(text);
     }
 
@@ -1042,6 +1048,7 @@ export class ProseMirrorEditorCore implements EditorCore {
     this.htmlPasteContexts.set(event, context);
     const inserted = this.view!.pasteHTML(html, event);
     this.htmlPasteContexts.delete(event);
+    if (this.rejectedTableChange) return { status: 'rejected', reason: 'unsupported-table' };
     return context.result ?? (inserted ? { status: 'inserted', format: 'html' } : { status: 'rejected', reason: 'no-text' });
   }
 
@@ -1071,6 +1078,7 @@ export class ProseMirrorEditorCore implements EditorCore {
   }
 
   private handleNativePaste(event: ClipboardEvent, slice: Slice): boolean {
+    this.rejectedTableChange = false;
     if (!this.view || !this.isEditable()) {
       const context = this.htmlPasteContexts.get(event);
       if (context) context.result = { status: 'rejected', reason: 'readonly' };
@@ -1088,7 +1096,7 @@ export class ProseMirrorEditorCore implements EditorCore {
         delegateImagePaste(event);
         return true;
       }
-      return false;
+      if (!this.isTableClipboardSlice(slice)) return false;
     }
 
     const text = clipboard?.getData('text/plain') ?? '';
@@ -1110,12 +1118,35 @@ export class ProseMirrorEditorCore implements EditorCore {
       event.preventDefault();
       return true;
     }
-    if (!plain && isInTable(this.view.state) && this.isTableClipboardSlice(slice) &&
-        handleTablePaste(this.view, event, slice)) {
-      const context = this.htmlPasteContexts.get(event);
-      if (context) context.result = { status: 'inserted', format: 'html' };
-      event.preventDefault();
-      return true;
+    if (!plain && isInTable(this.view.state) && this.isTableClipboardSlice(slice)) {
+      const context = findTableContext(this.view.state)!;
+      const actualView = this.view;
+      let pasteState = actualView.state;
+      if (pasteState.selection instanceof CellSelection) {
+        // Preserve the entire incoming grid. The library's CellSelection path
+        // clips/repeats cells to fit the selection instead of growing the table.
+        const rect = selectedRect(pasteState);
+        const cell = context.tableStart + context.map.map[rect.top * context.map.width + rect.left];
+        pasteState = pasteState.apply(pasteState.tr.setSelection(TextSelection.near(pasteState.doc.resolve(cell + 1))));
+      }
+      const pasteView = new Proxy(actualView, {
+        get(target, key) {
+          if (key === 'state') return pasteState;
+          if (key === 'dispatch') return (tr: Transaction) => {
+            normalizePastedMarkdownTable(tr, context.tableStart, context.table);
+            actualView.dispatch(tr);
+          };
+          return Reflect.get(target, key, target);
+        },
+      });
+      if (handleTablePaste(pasteView, event, slice)) {
+        const context = this.htmlPasteContexts.get(event);
+        if (context) context.result = this.rejectedTableChange
+          ? { status: 'rejected', reason: 'unsupported-table' }
+          : { status: 'inserted', format: 'html' };
+        event.preventDefault();
+        return true;
+      }
     }
     if (!plain && !html && text && this.insertListClipboardShortcut(text)) {
       event.preventDefault();
@@ -1191,7 +1222,7 @@ export class ProseMirrorEditorCore implements EditorCore {
         .scrollIntoView();
       if (!transaction.docChanged) return false;
       this.view.dispatch(transaction);
-      return true;
+      return !this.rejectedTableChange;
     } catch {
       return false;
     }
@@ -1435,6 +1466,7 @@ export class ProseMirrorEditorCore implements EditorCore {
 
   execute(command: EditorCommand): boolean {
     this.assertActive();
+    this.rejectedTableChange = false;
     this.flushPendingMarkdownSync();
     if (this.runtime.strictMarkdown && command.type === 'insertImage') command = { ...command, width: null, align: null };
 
@@ -1466,7 +1498,7 @@ export class ProseMirrorEditorCore implements EditorCore {
       // 先结束旧输入缓冲，再应用文档历史，避免失焦把撤销前的值写回。
       commitActiveEdit(this.view, true);
     }
-    return this.runProseMirrorCommand(command);
+    return this.runProseMirrorCommand(command) && !this.rejectedTableChange;
   }
 
   canExecute(command: EditorCommand): boolean {
@@ -1643,7 +1675,12 @@ export class ProseMirrorEditorCore implements EditorCore {
         tableControlsPlugin({
           strictMarkdown: () => this.runtime.strictMarkdown ?? true,
           copyTable: this.options.onCopyTable ? table => {
-            if (this.view) this.options.onCopyTable?.(createTableClipboardPayload(table, this.view.dom.ownerDocument, this.runtime.strictMarkdown));
+            if (!this.view) return;
+            try {
+              this.options.onCopyTable?.(createTableClipboardPayload(table, this.view.dom.ownerDocument, this.runtime.strictMarkdown));
+            } catch {
+              this.options.onError?.({ code: 'unsupported-markdown-table', message: t.markdownTableChangeRejected() });
+            }
           } : undefined,
         }),
         tableLayoutPlugin(),
@@ -1887,6 +1924,11 @@ export class ProseMirrorEditorCore implements EditorCore {
     // 空模板清理和原文标记可能由 appendTransaction 完成，不能只看首个事务。
     const docChanged = !nextState.doc.eq(previousDoc);
     if (this.runtime.readonly && docChanged) return;
+    if (docChanged && introducesUnsupportedTable(previousDoc, nextState.doc)) {
+      this.rejectedTableChange = true;
+      this.options.onError?.({ code: 'unsupported-markdown-table', message: t.markdownTableChangeRejected() });
+      return;
+    }
     if (this.view) this.view.updateState(nextState);
     else this.suspendedState = nextState;
 

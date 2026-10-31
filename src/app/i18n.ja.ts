@@ -683,6 +683,7 @@ export const JA_JP_EXTRA_TRANSLATIONS = {
   deleteTable: 'テーブルの削除',
   copyTable: 'テーブルをコピー',
   beautifyTableSource: 'テーブルのソースを整形',
+  markdownTableChangeRejected: '内容を失わずに Markdown の表として保持できないため、操作を取り消しました。元の文書は変更されていません。',
   imageLoading: '画像の読み込み中',
   footnoteContentPlaceholder: '脚注の内容を入力してください',
   unavailableSuffix: '(利用不可)',
