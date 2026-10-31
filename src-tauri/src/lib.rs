@@ -313,6 +313,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             crate::emoji_catalog::load_emoji_catalog,
             crate::file_clipboard::copy_file_to_clipboard,
+            crate::file_clipboard::read_editor_clipboard_text,
             crate::export::export_html,
             crate::export::export_docx,
             crate::export::export_pdf_from_html,

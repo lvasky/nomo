@@ -90,8 +90,8 @@
 | 八类行内显隐与组字 | `src/lib/editor-core/plugins/inlineSourceEditing.ts` | `src/app/styles/editor-document.css`, `plugins/typography.ts` | 光标/选区所在格式局部展开、单击与实际拖选区分、拖选保持、IME 冻结、真实符号装饰与空模板追踪 |
 | 当前标题层级角标 | `src/lib/editor-core/plugins/headingLevelIndicator.ts` | `src/app/styles/editor-document.css` | H1-H6 当前标题角标的定位、显隐或 GSAP 动效 |
 | 正文外侧整段选择 | `src/lib/editor-core/plugins/paragraphSelectionGutter.ts` | `src/lib/editor-core/ProseMirrorEditorCore.ts`, `src/app/styles/editor-document.css`, `src/app/i18n.ts`, `src/app/i18n.ja.ts` | 顶层普通段落与标题左侧的悬停短竖线、真实整段选区、缩放命中和浮层生命周期；不接管列表、表格、代码块或正文拖选 |
-| 表格控件 | `src/lib/editor-core/plugins/tableControls.ts` | `src/lib/editor-core/plugins/tableControlDom.ts`, `tableCommands.ts`, `markdownSerialization.ts` | 表格行列控制 UI、共用行增删事务内的列对齐与首行表头归一化、单元格内容保存 |
-| 表格自动列宽与局部滚动 | `src/lib/table-layout/widths.ts`, `src/lib/table-layout/dom.ts` | `src/lib/editor-core/nodeViews/TableNodeView.ts`, `src/lib/table-layout/export.ts`, `src/lib/table-layout/table-layout.css`, `plugins/tableControls.ts`, `plugins/typography.ts` | 语义内容度量、合并格约束、按需列宽、视图级调度与缓存、精细排版失效、HTML/PDF 目标宽度重排；自动宽度不写入 Markdown |
+| 表格控件 | `src/lib/editor-core/plugins/tableControls.ts` | `src/lib/editor-core/plugins/tableControlDom.ts`, `tableCommands.ts`, `tableActions.ts`, `tableSource.ts`, `sourcePreservation.ts`, `markdownSerialization.ts` | 表格行列控制 UI、共用行增删事务内的列对齐与首行表头归一化、整表 Markdown/HTML 复制、按需美化当前表格源码及独立撤销、单元格内容保存 |
+| 表格自动列宽与局部滚动 | `src/lib/editor-core/nodeViews/TableNodeView.ts`, `src/lib/table-layout/table-layout.css` | `src/lib/table-layout/widths.ts`, `src/lib/table-layout/dom.ts`, `src/lib/table-layout/export.ts`, `plugins/tableControls.ts`, `plugins/typography.ts` | WYSIWYG 使用原生 table-layout:auto 与真实固有 min/max-content，表格至少占满内容区；colgroup 仅提供无宽度列标记，表格内不应用 KP 固定断行；工具栏观察表头几何跟随原生列宽；HTML/PDF 保留独立测量策略；视觉布局不写入 Markdown |
 | 不可编辑 HTML 回退展示 | `src/lib/editor-core/plugins/tableHtml.ts` | `html/htmlClassifier.ts`, `utils/html.ts`, `plugins/tableHtml.test.ts`, `src/app/services/export/render.ts` | 原始 HTML widget 展示、未变化预览的 DOM 复用与事务位置映射；编辑器与导出共用对齐段落和 HTML 空白处理；Markdown 表格由统一 parser 与 schema 渲染 |
 | 任务列表 | `src/lib/editor-core/plugins/taskList.ts` | `src/lib/editor-core/InlineSourceCodec.ts`, `editorCommands.ts`, `ProseMirrorEditorCore.ts`, `markdownSerialization.ts` | 修改任务首段标记识别、列表切换/续行、只读复选框或保存边界 |
 | 链接交互 | `src/lib/editor-core/plugins/linkInteraction.ts` | `src/app/components/LinkQuickEditor.svelte` | 链接点击/悬浮/编辑 |
@@ -129,7 +129,7 @@
 | 恢复草稿 | `src/app/services/recoveryDraft.ts` | `src/app/services/documentActionsController.ts` | 异常退出后草稿写入/恢复 |
 | Markdown 桥接 | `src/lib/markdown/MarkdownBridge.ts` | `src/lib/markdown/frontMatter.ts` | front matter 与正文分离/合并规则变更 |
 | 图片插入协调 | `src/app/services/imageInsertion.ts` | `src/app/services/imageMarkdown.ts`, `src/lib/editor-core/renderers.ts` | 粘贴/拖放图片导入、策略选择、源码插入 |
-| 剪贴板协调 | `src/app/services/clipboard.ts` | `src/app/App.svelte`, `@tauri-apps/plugin-clipboard-manager`, `src-tauri/src/file_clipboard.rs` | 文本/安全 HTML/图片的 Web Clipboard 与 Tauri 读写、降级和 RGBA 转 PNG，以及原生文件复制 IPC |
+| 剪贴板协调 | `src/app/services/clipboard.ts` | `src/app/App.svelte`, `src/app/services/imageInsertion.ts`, `src/lib/editor-core/imagePasteEvents.ts`, `@tauri-apps/plugin-clipboard-manager`, `src-tauri/src/file_clipboard.rs` | 文本/安全 HTML/图片的 Web Clipboard 与 Tauri 读写；Excel HTML 优先于替代位图，Ctrl+V 图片分流时恢复原生表格；RGBA 转 PNG 及原生文件复制 IPC |
 | 原生文件剪贴板 | `src-tauri/src/file_clipboard.rs` | `src/app/services/clipboard.ts`, `src-tauri/src/lib.rs`, `arboard` | 校验已保存文件路径、写入系统文件列表并保持剪贴板实例存活 |
 | 图片 Markdown 路径 | `src/app/services/imageMarkdown.ts` | `src/app/services/imageInsertion.ts` | 图片文件过滤、路径/Markdown 语法生成 |
 | 文件存储与文档仓库接口 | `src/lib/services/storage.ts` | `src/lib/desktop/tauriStorage.ts` | FileStorage、DocumentRepository、Markdown 源编码契约变更 |

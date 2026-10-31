@@ -681,6 +681,8 @@ export const JA_JP_EXTRA_TRANSLATIONS = {
   alignCenterTable: '中央揃え',
   toggleHeaderRow: 'ヘッダー行を切り替えます',
   deleteTable: 'テーブルの削除',
+  copyTable: 'テーブルをコピー',
+  beautifyTableSource: 'テーブルのソースを整形',
   imageLoading: '画像の読み込み中',
   footnoteContentPlaceholder: '脚注の内容を入力してください',
   unavailableSuffix: '(利用不可)',

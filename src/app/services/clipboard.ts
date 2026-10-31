@@ -7,6 +7,24 @@ export type ClipboardReadResult =
 
 export type ClipboardReadPreference = 'rich' | 'text';
 
+/** Excel also supplies a bitmap of its selection; the table is the editable representation. */
+export function containsClipboardTable(html: string): boolean {
+  if (!/<table[\s>]/i.test(html)) return false;
+  const template = document.createElement('template');
+  template.innerHTML = html;
+  return template.content.querySelector('table td, table th') !== null;
+}
+
+function restoreClipboardTableEnvelope(html: string): string {
+  if (containsClipboardTable(html) || !/<(?:tr|td|th|tbody|thead|tfoot)[\s>]/i.test(html)) return html;
+  // CF_HTML's StartFragment/EndFragment can be inside Excel's <table>.
+  // arboard returns that fragment, so restore the missing table context before
+  // parsing; otherwise HTML parsing drops standalone row/cell elements.
+  const template = document.createElement('template');
+  template.innerHTML = `<table>${html}</table>`;
+  return template.content.querySelector('table td, table th') ? template.innerHTML : html;
+}
+
 export async function writeFileClipboard(path: string): Promise<void> {
   const { invoke } = await import('@tauri-apps/api/core');
   await invoke('copy_file_to_clipboard', { path });
@@ -46,6 +64,13 @@ export async function readEditorClipboard(
   desktopEnabled: boolean,
   preference: ClipboardReadPreference = 'rich',
 ): Promise<ClipboardReadResult> {
+  // WebView2 may expose only Excel's PNG representation. Read CF_HTML through
+  // the existing native clipboard first, rather than falling straight to readImage.
+  const native = desktopEnabled ? await tryReadNativeClipboardText() : null;
+  if (preference === 'text' && native?.text) return { kind: 'text', text: native.text };
+  if (preference === 'rich' && native && containsClipboardTable(native.html)) {
+    return { kind: 'html', html: native.html, text: native.text };
+  }
   const webResult = await tryReadWebClipboard(preference);
   if (webResult) return webResult;
   if (!desktopEnabled) {
@@ -69,6 +94,23 @@ export async function readEditorClipboard(
   }
 }
 
+async function tryReadNativeClipboardText(): Promise<{ html: string; text: string } | null> {
+  try {
+    const { invoke } = await import('@tauri-apps/api/core');
+    const result = await invoke<{ html: string; text: string }>('read_editor_clipboard_text');
+    return { ...result, html: restoreClipboardTableEnvelope(result.html) };
+  } catch {
+    // Keep the existing Web Clipboard / image-only fallback available.
+    return null;
+  }
+}
+
+/** Ctrl+V can expose a PNG File while hiding Excel's native HTML from DataTransfer. */
+export async function readNativeClipboardTable(): Promise<{ html: string; text: string } | null> {
+  const native = await tryReadNativeClipboardText();
+  return native && containsClipboardTable(native.html) ? native : null;
+}
+
 async function tryReadWebClipboard(
   preference: ClipboardReadPreference,
 ): Promise<ClipboardReadResult | null> {
@@ -79,19 +121,22 @@ async function tryReadWebClipboard(
     let html = '';
     let text = '';
     for (const item of items) {
-      const imageType = item.types.find((type) => type.startsWith('image/'));
-      if (imageType) {
-        const blob = await item.getType(imageType);
-        imageFiles.push(new File([blob], `clipboard.${extensionForMime(imageType)}`, { type: imageType }));
-      }
       if (!html && item.types.includes('text/html')) {
-        html = await (await item.getType('text/html')).text();
+        html = restoreClipboardTableEnvelope(await (await item.getType('text/html')).text());
       }
       if (!text && item.types.includes('text/plain')) {
         text = await (await item.getType('text/plain')).text();
       }
     }
     if (preference === 'text') return { kind: 'text', text };
+    if (containsClipboardTable(html)) return { kind: 'html', html, text };
+    for (const item of items) {
+      const imageType = item.types.find((type) => type.startsWith('image/'));
+      if (imageType) {
+        const blob = await item.getType(imageType);
+        imageFiles.push(new File([blob], `clipboard.${extensionForMime(imageType)}`, { type: imageType }));
+      }
+    }
     if (imageFiles.length) return { kind: 'image', files: imageFiles };
     if (html) return { kind: 'html', html, text };
     if (text) return { kind: 'text', text };

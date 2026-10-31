@@ -4,6 +4,7 @@ import {
   TABLE_WIDTH_POLICY,
   type CellMetrics,
   type ColumnConstraint,
+  type TableWidthMode,
 } from './widths';
 
 export const TABLE_LAYOUT_EVENT = 'nomo:table-layout';
@@ -38,6 +39,7 @@ interface Entry {
 }
 interface CachedMetric {
   natural: number;
+  compact: boolean;
   atomic: number;
   chrome: number;
   signature: string;
@@ -92,7 +94,7 @@ export class TableLayoutController {
   private assets = new Set<Element>();
   private assetsDirty = true;
 
-  constructor(private root: HTMLElement) {
+  constructor(private root: HTMLElement, private readonly mode: TableWidthMode = 'export') {
     if (typeof ResizeObserver !== 'undefined') {
       this.observer = new ResizeObserver((entries) => {
         let widthChanged = false;
@@ -353,6 +355,9 @@ export class TableLayoutController {
             for (const item of batch) {
               const metric = item.metric ?? {
                 natural: item.box!.getBoundingClientRect().width,
+                // Preserve short ASCII tokens, not Chinese phrases or prose
+                // that can wrap naturally. No additional layout read is needed.
+                compact: /^[\x21-\x7e]+$/.test(item.box!.textContent?.trim() ?? ''),
                 atomic: Math.max(
                   0,
                   ...[...item.box!.querySelectorAll<HTMLElement>('.math-inline')].map(
@@ -365,6 +370,7 @@ export class TableLayoutController {
               if (!item.metric) this.cachePut(item.id!, metric);
               job.metrics.push({
                 natural: metric.natural,
+                compact: metric.compact,
                 atomic: metric.atomic,
                 chrome: metric.chrome,
                 column: item.cell.column,
@@ -380,6 +386,7 @@ export class TableLayoutController {
               entry.source.columns(),
               job.metrics,
               parseFloat(font.fontSize) || 14,
+              this.mode,
             );
             entry.dirty = false;
             entry.job = undefined;

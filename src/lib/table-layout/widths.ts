@@ -18,6 +18,8 @@ export interface CellMetrics {
   natural: number;
   atomic: number;
   chrome: number;
+  /** A short token without natural word breaks, e.g. a register or address. */
+  compact?: boolean;
   explicit?: readonly number[] | null;
 }
 export interface ColumnConstraint {
@@ -29,14 +31,19 @@ export interface TableWidths {
   width: number;
   overflow: boolean;
 }
+export type TableWidthMode = 'editor' | 'export';
 
 /** Input contains each physical cell once, including cells spanning multiple rows. */
 export function tableConstraints(
   count: number,
   cells: readonly CellMetrics[],
   em: number,
+  mode: TableWidthMode = 'export',
 ): ColumnConstraint[] {
   const policy = TABLE_WIDTH_POLICY;
+  // Editing favors wrapping before scrolling. Keep the export/print policy intact.
+  const minimumEm = mode === 'editor' ? policy.emptyEm : policy.minimumEm;
+  const minimumHeaderEm = mode === 'editor' ? policy.emptyEm : policy.headerEm;
   const groups: CellMetrics[][] = Array.from({ length: count }, () => []);
   for (const cell of cells)
     if (cell.span === 1 && groups[cell.column]) groups[cell.column].push(cell);
@@ -56,13 +63,23 @@ export function tableConstraints(
       .sort((a, b) => a - b);
     const p90 = body.length ? body[Math.ceil(body.length * 0.9) - 1] : 0;
     const longest = body.at(-1) ?? 0;
+    // Short fields (addresses, register names, numbers) should not lose space to
+    // a verbose neighbor. Long cells can shrink without imposing a 6–12em floor.
+    const compact =
+      mode === 'editor'
+        ? maximum(
+            own.filter((cell) => cell.compact && cell.natural <= policy.minimumEm * em),
+            'natural',
+          )
+        : 0;
     const minimum =
       chrome +
       Math.max(
         policy.emptyEm * em,
-        Math.min(natural, policy.minimumEm * em),
+        Math.min(natural, minimumEm * em),
         // Keep ordinary headers readable when body columns compete for space.
-        Math.min(header, policy.headerEm * em),
+        Math.min(header, minimumHeaderEm * em),
+        compact,
         maximum(own, 'atomic'),
       );
     return {
@@ -102,10 +119,7 @@ export function tableConstraints(
       cell.chrome +
       Math.max(
         policy.emptyEm * em * cell.span,
-        Math.min(
-          cell.natural,
-          (cell.header ? policy.headerEm : policy.minimumEm) * em * cell.span,
-        ),
+        Math.min(cell.natural, (cell.header ? minimumHeaderEm : minimumEm) * em * cell.span),
         cell.atomic,
       );
     raise(cell.column, cell.span, 'minimum', minimum);

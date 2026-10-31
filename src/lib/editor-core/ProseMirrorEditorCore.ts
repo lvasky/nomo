@@ -1,6 +1,8 @@
 import { serializeSourceChange } from './sourcePreservation';
 import { requiresHtmlCommand, strictMarkdownPaste } from './strictMarkdown';
 import { tableSourcePlugin } from './tableSource';
+import { createTableClipboardPayload } from './tableActions';
+import { delegateImagePaste } from './imagePasteEvents';
 import { serializeClipboardText } from './markdownSerialization';
 import { typographyPlugin, isTypographyTransaction } from './plugins/typography';
 import { typographyBreaksPlugin } from './nodeViews/TypographyBreakNodeView';
@@ -87,7 +89,7 @@ import {
   projectInlineSourceWithMapping,
 } from './InlineSourceCodec';
 import { tableControlsPlugin } from './plugins/tableControls';
-import { TableNodeView, tableLayoutPlugin } from './nodeViews/TableNodeView';
+import { tableLayoutPlugin } from './nodeViews/TableNodeView';
 import { tableHtmlBlockPlugin } from './plugins/tableHtml';
 import { taskListPlugin } from './plugins/taskList';
 import { tocSyncPlugin } from './plugins/tocSync';
@@ -310,7 +312,6 @@ export class ProseMirrorEditorCore implements EditorCore {
         mousedown: (view, event) => handleTripleClickByDetail(view, event),
       },
       nodeViews: {
-        table: (node, view) => new TableNodeView(node, view),
         code_block: (node, view, getPos) =>
           new CodeBlockNodeView(node, view, getPos as () => number, this.isRestoringNodeSelection(getPos)),
         image: (node, view) =>
@@ -1079,6 +1080,14 @@ export class ProseMirrorEditorCore implements EditorCore {
     const clipboard = event.clipboardData;
     const plain = clipboard ? this.consumePlainTextPasteRequest() : false;
     if (!plain && clipboard && clipboard.files.length > 0) {
+      if (!this.isTableClipboardSlice(slice) &&
+        !/<table[\s>]/i.test(clipboard.getData('text/html')) &&
+        Array.from(clipboard.files).some(file => file.type.startsWith('image/'))) {
+        // Stop ProseMirror from inserting the alternate bitmap before the outer
+        // handler can recover Excel's native HTML or import the actual image.
+        delegateImagePaste(event);
+        return true;
+      }
       return false;
     }
 
@@ -1631,7 +1640,12 @@ export class ProseMirrorEditorCore implements EditorCore {
         tocSyncPlugin(),
         tableHtmlBlockPlugin(),
         tableSourcePlugin(),
-        tableControlsPlugin({ strictMarkdown: () => this.runtime.strictMarkdown ?? true }),
+        tableControlsPlugin({
+          strictMarkdown: () => this.runtime.strictMarkdown ?? true,
+          copyTable: this.options.onCopyTable ? table => {
+            if (this.view) this.options.onCopyTable?.(createTableClipboardPayload(table, this.view.dom.ownerDocument, this.runtime.strictMarkdown));
+          } : undefined,
+        }),
         tableLayoutPlugin(),
         tableEditing({ allowTableNodeSelection: true }),
         createCalloutPlugin(),

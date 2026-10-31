@@ -3574,6 +3574,12 @@
     });
   }
 
+  function copyTableToClipboard(payload: { text: string; html: string }) {
+    void writeEditorClipboard(payload, desktopEnabled).catch(() => {
+      statusMessage = t.copyFailed();
+    });
+  }
+
   async function copyPlainText(text: string) {
     try {
       await writeEditorClipboard({ text, html: '' }, desktopEnabled);
@@ -3809,6 +3815,7 @@
     quickInsertTrigger,
     theme: initialResolvedTheme.editorTheme,
     onSelectionSnapshotChange: handleSemanticSelectionChange,
+    onCopyTable: copyTableToClipboard,
     onLinkShortcut: () => openLinkPicker(),
     onQuickInsertPicker: (event) => openQuickInsertPicker(activeTabId, event),
     onOpenLink: (href) => openLinkFromEditor(href),
@@ -3855,6 +3862,7 @@
       inlineCodeRenderingEnabled, strictMarkdown, copyMarkdownSyntaxEnabled, theme: currentEditorTheme,
       quickInsertEnabled, quickInsertTrigger,
       onSelectionSnapshotChange: (event) => { if (activeTabId === tab.id) handleSemanticSelectionChange(event); },
+      onCopyTable: copyTableToClipboard,
       onLinkShortcut: () => { void switchTab(tab.id).then(openLinkPicker); },
       onQuickInsertPicker: (event) => openQuickInsertPicker(tab.id, event),
       onOpenLink: (href) => openLinkFromEditor(href, tab.id),
@@ -3885,6 +3893,7 @@
       getSourceLineHeight: () => runtime.sourceEditor?.getLineHeight() ?? 24,
     });
     runtime.images = createImageInsertionHandlers({
+      getDesktopEnabled: () => desktopEnabled,
       getStrictMarkdown: () => strictMarkdown,
       getEditor: () => core, getMode: () => runtime.mode === 'source' ? 'source' : 'semantic',
       getFileName: () => currentDocument()?.fileName ?? tab.fileName, getNativePath: () => currentDocument()?.nativePath ?? null,
@@ -5222,6 +5231,7 @@
     getSourceLineHeight,
   });
   const imageInsertion = createImageInsertionHandlers({
+    getDesktopEnabled: () => desktopEnabled,
     getStrictMarkdown: () => strictMarkdown,
     getEditor: () => editor,
     getMode: () => getActiveEditorMode(),

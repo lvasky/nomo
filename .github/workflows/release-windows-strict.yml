@@ -51,6 +51,8 @@ jobs:
             src/lib/editor-core/InlineSourceCodec.test.ts `
             src/lib/editor-core/tableMarkdown.test.ts `
             src/lib/editor-core/tableCommands.test.ts `
+            src/lib/editor-core/tableActions.test.ts `
+            src/lib/table-layout/widths.test.ts `
             src/lib/editor-core/clipboardMarkdown.test.ts `
             src/lib/editor-core/markdown.test.ts `
             src/lib/editor-core/details.test.ts `
@@ -60,6 +62,7 @@ jobs:
             src/app/services/settings.test.ts `
             src/app/services/editorInteractionController.test.ts `
             src/app/services/imageInsertion.test.ts `
+            src/app/services/clipboard.test.ts `
             --maxWorkers=4 --minWorkers=1 --reporter=default --reporter=json --outputFile=artifacts/tests.json
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
@@ -92,10 +95,14 @@ jobs:
           ## Windows x64 严格 Markdown 版本
 
           - 下载 x64-setup.exe 安装，或解压 x64.zip 后运行 Nomo.exe。
+          - 所见即所得表格使用原生 table-layout:auto，由浏览器按真实 min-content/max-content 分配列宽；少列和短文本表格也占满内容区。
+          - 表格支持自然换行及连续长字符串断行，超宽内容在表格容器内滚动；视觉换行不改写 Markdown。
+          - 表格工具栏新增“复制表格”和“美化表格源码”；整表提供 Markdown/HTML，源码美化仅在点击时执行并支持独立撤销。
+          - 修复 Excel Ctrl+V 仅插入位图的问题：优先恢复 Windows 原生 HTML 表格，并补齐表格片段外壳；纯图片保留图片导入。
           - 新增“复制为 Markdown”（Ctrl+Shift+C）；普通复制默认可见文字并保留显式偏好，剪贴板同时提供文本与 HTML。
           - 普通粘贴优先转换 HTML，纯文本粘贴和代码区域保持字面值。
           - 根据行首、表格、代码和链接上下文最小转义；PRI->Stage、A > B、REG[3:0] 不添加无意义转义。
-          - 五轮复制、粘贴、保存和重开验收；未改动的顶层块保留原始字节与换行。
+          - 保留未改动内容的源码格式、空格与换行；复制粘贴按上下文最小转义。
           - 严格 Markdown 默认开启，以 GFM 为基础兼容 GitHub、GitLab 和 VS Code 预览。
           - 保留原有及手动输入的 HTML；表格单元格内换行允许使用 <br>。
           - 未编辑的表格保留原始格式；单元格编辑和列对齐尽量减少 Git 差异。
@@ -117,6 +124,6 @@ jobs:
             artifacts/Nomo_strict-markdown_x64.zip `
             artifacts/SHA256SUMS.txt `
             --verify-tag --prerelease --latest=false `
-            --title 'Nomo 0.6.2 · 严格 Markdown（Windows x64）' `
+            --title 'Nomo 0.6.2 · 原生表格布局与 Excel 粘贴修复（Windows x64）' `
             --notes-file artifacts/RELEASE.md
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }

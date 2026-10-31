@@ -1,4 +1,5 @@
-/* The shell owns overflow; the view-only colgroup owns widths. */
+/* The shell owns overflow. Editable tables use native intrinsic column sizing;
+   the separate export runtime can still supply measured colgroup widths. */
 .nomo-table-scroll {
   min-width: 0;
   max-width: 100%;
@@ -13,6 +14,27 @@
   border-spacing: 0;
   border-right: 0;
   border-bottom: 0;
+}
+.prosemirror-host .ProseMirror .nomo-native-table > table {
+  table-layout: auto;
+  width: 100%;
+  min-width: 100%;
+  /* Do not cap intrinsic minima: genuine overflow stays inside the scroll shell. */
+  max-width: none;
+}
+.prosemirror-host .ProseMirror .nomo-native-table th,
+.prosemirror-host .ProseMirror .nomo-native-table td,
+.prosemirror-host .ProseMirror .nomo-native-table p {
+  white-space: normal;
+  /* Native auto uses the real min/max-content sizes, including emergency breaks. */
+  overflow-wrap: anywhere;
+  word-break: normal;
+}
+.prosemirror-host .ProseMirror .nomo-native-table code,
+.prosemirror-host .ProseMirror .nomo-native-table .pm-inline-source-code {
+  white-space: break-spaces;
+  overflow-wrap: anywhere;
+  word-break: normal;
 }
 .prosemirror-host .ProseMirror .nomo-table-scroll th,
 .prosemirror-host .ProseMirror .nomo-table-scroll td,

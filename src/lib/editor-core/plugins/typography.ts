@@ -484,6 +484,9 @@ function createViewController(view: EditorView) {
     paragraphTargets.clear();
     visibleParagraphs.clear();
     doc.descendants((node, pos) => {
+      // Native table auto layout needs unmodified min/max-content contributions.
+      // Fixed KP line breaks and paragraph widths would feed back into column sizing.
+      if (node.type.spec.tableRole === 'table') return false;
       if (node.type.name !== 'paragraph' || !node.content.size) return;
       const element = view.nodeDOM(pos);
       if (element instanceof HTMLElement) {
@@ -614,6 +617,11 @@ function createViewController(view: EditorView) {
         const node = target.node;
         const element = view.nodeDOM(target.from);
         if (!(element instanceof HTMLElement)) continue;
+        if (element.closest('.nomo-native-table')) {
+          // Also clear retained decorations when a paragraph is moved into a table.
+          changedRanges.push({ from: target.from, to: target.to });
+          continue;
+        }
         const sourceGeometry = paragraphSourceGeometry(view, target.from, node);
         const signature = paragraphSignature(element, options, sourceGeometry);
         let rendered: Decoration[] | null = null;

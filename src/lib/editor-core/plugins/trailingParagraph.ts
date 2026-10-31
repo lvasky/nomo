@@ -118,8 +118,16 @@ function collectInsertedRanges(transactions: readonly Transaction[]): InsertedRa
     const transaction = transactions[transactionIndex];
 
     transaction.mapping.maps.forEach((stepMap, stepIndex) => {
-      stepMap.forEach((_oldStart, _oldEnd, newStart, newEnd) => {
+      stepMap.forEach((oldStart, oldEnd, newStart, newEnd) => {
         if (newEnd <= newStart) return;
+        const before = transaction.docs[stepIndex].nodeAt(oldStart);
+        const after = (transaction.docs[stepIndex + 1] ?? transaction.doc).nodeAt(newStart);
+        // Explicit source formatting (including undo/redo) replaces the table's
+        // source identity, not an inserted block needing a new paragraph.
+        if (before?.type.name === 'table' && after?.type === before.type &&
+          before.nodeSize === oldEnd - oldStart && after.nodeSize === newEnd - newStart &&
+          before.attrs.sourceFormatRevision !== after.attrs.sourceFormatRevision &&
+          before.content.eq(after.content)) return;
 
         let from = newStart;
         let to = newEnd;

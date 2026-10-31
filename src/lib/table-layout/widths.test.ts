@@ -14,6 +14,57 @@ const cell = (column: number, natural: number, extra: Partial<CellMetrics> = {})
 const total = (values: number[]) => values.reduce((a, b) => a + b, 0);
 
 describe('content-driven table widths', () => {
+  it('fits 6–10 verbose editor columns by wrapping headers and bodies before scrolling', () => {
+    for (const count of [6, 8, 10]) {
+      const cells = Array.from({ length: count }, (_, i) => [
+        cell(i, 240, { header: true }),
+        cell(i, 600 + i * 30),
+      ]).flat();
+      const result = allocateTableWidths(tableConstraints(count, cells, 14, 'editor'), 760);
+      expect(result.overflow).toBe(false);
+      expect(result.width).toBe(760);
+      expect(allocateTableWidths(tableConstraints(count, cells, 14), 760).overflow).toBe(true);
+    }
+  });
+  it('protects compact editor fields beside long descriptions and bounds long outliers', () => {
+    const constraints = tableConstraints(
+      3,
+      [cell(0, 62, { compact: true }), cell(1, 78, { compact: true }), cell(2, 10000)],
+      14,
+      'editor',
+    );
+    const result = allocateTableWidths(constraints, 360);
+    expect(result.overflow).toBe(false);
+    expect(result.columns[0]).toBeGreaterThanOrEqual(62 + 23);
+    expect(result.columns[1]).toBeGreaterThanOrEqual(78 + 23);
+    expect(result.columns[2]).toBeGreaterThan(result.columns[1]);
+    expect(constraints[2].preferred).toBe(28 * 14 + 23);
+  });
+  it('lets short Chinese phrases wrap instead of treating them as unbreakable fields', () => {
+    const cells = Array.from({ length: 10 }, (_, column) => cell(column, 84));
+    const result = allocateTableWidths(tableConstraints(10, cells, 14, 'editor'), 760);
+    expect(result.overflow).toBe(false);
+    expect(result.width).toBe(760);
+  });
+  it('retains a readable editor floor, merged spans, authored widths and atomic objects', () => {
+    const extreme = tableConstraints(
+      30,
+      Array.from({ length: 30 }, (_, i) => cell(i, 600)),
+      14,
+      'editor',
+    );
+    expect(allocateTableWidths(extreme, 760).overflow).toBe(true);
+    expect(extreme.every((column) => column.minimum === 65)).toBe(true);
+    const constraints = tableConstraints(
+      3,
+      [cell(0, 600, { header: true, span: 2 }), cell(2, 800, { atomic: 200, explicit: [260] })],
+      14,
+      'editor',
+    );
+    const result = allocateTableWidths(constraints, 500);
+    expect(result.columns[0] + result.columns[1]).toBeGreaterThanOrEqual(3 * 14 * 2 + 23);
+    expect(result.columns[2]).toBeGreaterThanOrEqual(260);
+  });
   it('keeps a short table compact and gives longer fields more width', () => {
     const constraints = tableConstraints(3, [cell(0, 28), cell(1, 140), cell(2, 250)], 14);
     const result = allocateTableWidths(constraints, 900);

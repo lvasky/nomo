@@ -1,140 +1,59 @@
-import { DOMSerializer, type Node as ProseMirrorNode } from 'prosemirror-model';
+import type { Node as ProseMirrorNode } from 'prosemirror-model';
 import { Plugin } from 'prosemirror-state';
 import { TableMap } from 'prosemirror-tables';
 import type { EditorView, ViewMutationRecord } from 'prosemirror-view';
-import { projectInlineSource } from '../InlineSourceCodec';
-import { TableLayoutController, type TableCellSource } from '../../table-layout/dom';
-import { subscribeTypographyInteraction } from '../../typography/interaction';
-import katex from 'katex';
 
-const controllers = new WeakMap<EditorView, TableLayoutController>();
-function controllerFor(view: EditorView) {
-  let controller = controllers.get(view);
-  if (!controller) {
-    controller = new TableLayoutController(view.dom);
-    controllers.set(view, controller);
-  }
-  return controller;
-}
-function releaseController(view: EditorView) {
-  // Replacing EditorState can recreate plugin views while retaining table NodeViews.
-  // Dispose after that synchronous transition, only when no live tables remain.
-  queueMicrotask(() => {
-    const controller = controllers.get(view);
-    if (controller && (view.isDestroyed || controller.empty)) {
-      controller.destroy();
-      controllers.delete(view);
-    }
-  });
+// Keep this factory stable when replacing plugin/state instances so ProseMirror
+// can retain the editable table DOM, caret and cell selection.
+function nativeTableNodeView(node: ProseMirrorNode, view: EditorView) {
+  return new TableNodeView(node, view);
 }
 
-/** The plugin owns resources; suspended views destroy it along with their NodeViews. */
 export function tableLayoutPlugin() {
   return new Plugin({
-    view(view) {
-      let revision = -1;
-      const interaction = subscribeTypographyInteraction((snapshot) => {
-        if (snapshot.geometryRevision === revision) return;
-        revision = snapshot.geometryRevision;
-        if (snapshot.geometrySource === 'font') controllers.get(view)?.invalidate();
-      });
-      return {
-        destroy() {
-          interaction.destroy();
-          releaseController(view);
-        },
-      };
-    },
+    props: { nodeViews: { table: nativeTableNodeView } },
   });
 }
 
-export const flushEditorTableLayout = (view: EditorView) =>
-  controllers.get(view)?.flush() ?? Promise.resolve();
+/** Wait for the browser's next layout opportunity; there is no JS width job to flush. */
+export function flushEditorTableLayout(view: EditorView): Promise<void> {
+  const window = view.dom.ownerDocument.defaultView;
+  if (!window || view.isDestroyed) return Promise.resolve();
+  return new Promise(resolve => window.requestAnimationFrame(() => resolve()));
+}
 
-/** Owns only the scroll shell and colgroup, never the editable tbody. */
+/** Owns the scroll shell and column markers; the browser owns all column widths. */
 export class TableNodeView {
   readonly dom: HTMLDivElement;
   readonly table: HTMLTableElement;
   readonly contentDOM: HTMLTableSectionElement;
   private readonly colgroup: HTMLTableColElement;
-  private readonly registration: ReturnType<TableLayoutController['register']>;
 
-  constructor(
-    private node: ProseMirrorNode,
-    private view: EditorView,
-  ) {
+  constructor(private node: ProseMirrorNode, view: EditorView) {
     const doc = view.dom.ownerDocument;
     this.dom = doc.createElement('div');
-    this.dom.className = 'nomo-table-scroll';
+    this.dom.className = 'nomo-table-scroll nomo-native-table';
     this.table = this.dom.appendChild(doc.createElement('table'));
     this.colgroup = this.table.appendChild(doc.createElement('colgroup'));
     this.colgroup.dataset.tableLayoutOwned = 'true';
     this.contentDOM = this.table.appendChild(doc.createElement('tbody'));
-    this.registration = controllerFor(view).register({
-      table: this.table,
-      wrapper: this.dom,
-      colgroup: this.colgroup,
-      columns: () => TableMap.get(this.node).width,
-      cells: () => this.cells(),
-    });
+    this.updateColumns();
   }
 
-  private *cells(): Generator<TableCellSource> {
-    const node = this.node;
-    const map = TableMap.get(node);
-    const logicalColumns = new Map<number, number>();
-    map.map.forEach((offset, index) => {
-      if (!logicalColumns.has(offset)) logicalColumns.set(offset, index % map.width);
-    });
-    const nodes = DOMSerializer.nodesFromSchema(node.type.schema);
-    nodes.math_inline = (math) => {
-      const element = this.dom.ownerDocument.createElement('span');
-      element.className = 'math-inline';
-      element.dataset.tex = String(math.attrs.tex ?? '');
-      element.innerHTML = katex.renderToString(element.dataset.tex, {
-        displayMode: false,
-        throwOnError: false,
-        trust: false,
-      });
-      return element;
-    };
-    const serializer = new DOMSerializer(nodes, DOMSerializer.marksFromSchema(node.type.schema));
-    let rowOffset = 0;
-    for (let row = 0; row < node.childCount; row++) {
-      const rowNode = node.child(row);
-      let offset = rowOffset + 1;
-      for (let column = 0; column < rowNode.childCount; column++) {
-        const cell = rowNode.child(column);
-        const element = this.contentDOM.rows[row]?.cells[column];
-        if (!element) throw new Error('Table DOM is not ready for measurement');
-        yield {
-          key: cell,
-          element,
-          column: logicalColumns.get(offset)!,
-          span: cell.attrs.colspan,
-          header: cell.type.spec.tableRole === 'header_cell',
-          explicit: cell.attrs.colwidth,
-          content: () => {
-            const fragment = element.ownerDocument.createDocumentFragment();
-            serializer.serializeFragment(
-              projectInlineSource(cell).content,
-              { document: element.ownerDocument },
-              fragment,
-            );
-            return fragment;
-          },
-        };
-        offset += cell.nodeSize;
-      }
-      rowOffset += rowNode.nodeSize;
-    }
+  private updateColumns() {
+    // Empty <col> elements expose native column geometry to the existing toolbar.
+    // No pixel widths, equal-width rules or authored Markdown changes are applied.
+    const count = TableMap.get(this.node).width;
+    while (this.colgroup.childElementCount > count) this.colgroup.lastElementChild!.remove();
+    while (this.colgroup.childElementCount < count)
+      this.colgroup.appendChild(this.dom.ownerDocument.createElement('col'));
   }
 
   update(node: ProseMirrorNode) {
     if (node.type !== this.node.type) return false;
     if (node !== this.node) {
       this.node = node;
-      this.registration.update();
+      this.updateColumns();
     }
     return true;
   }
@@ -154,12 +73,11 @@ export class TableNodeView {
     return (
       mutation.type === 'childList' &&
       mutation.target === this.table &&
-      [...mutation.addedNodes, ...mutation.removedNodes].every((node) => node === this.colgroup)
+      [...mutation.addedNodes, ...mutation.removedNodes].every(node => node === this.colgroup)
     );
   }
 
   destroy() {
-    this.registration.destroy();
-    releaseController(this.view);
+    this.colgroup.remove();
   }
 }

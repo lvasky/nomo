@@ -15,12 +15,14 @@ import {
 } from '../tableCommands';
 import { findActiveTableElement } from './tableControlDom';
 import { TABLE_LAYOUT_EVENT } from '../../table-layout/dom';
+import { beautifyCurrentTable, canBeautifyTable } from '../tableActions';
 
 const tableControlsKey = new PluginKey('tableControls');
 
 type TableControlsOptions = {
   strictMarkdown?: () => boolean;
   showOuterBorderInsertButtons?: boolean;
+  copyTable?: (table: Node) => void;
 };
 
 type OverlayScale = {
@@ -44,6 +46,7 @@ class TableControlsView {
   private readonly dom = document.createElement('div');
   private frame = 0;
   private observedTable: HTMLTableElement | null = null;
+  private observedHeaderCells: HTMLTableCellElement[] = [];
   private readonly observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(() => this.refresh());
   private readonly refresh = () => {
     if (!this.frame) this.frame = requestAnimationFrame(() => { this.frame = 0; this.update(this.view); });
@@ -51,6 +54,10 @@ class TableControlsView {
   private resizePickerOpen = false;
   private resizePreviewRows = 0;
   private resizePreviewColumns = 0;
+  // One active immutable table only; selection/scroll updates need no cell rescan.
+  private formatTable: Node | null = null;
+  private formatStrict = true;
+  private formatEnabled = false;
   private readonly unsubscribeLocale: () => void;
   private readonly closeResizePickerOnDocumentPointerDown = (event: PointerEvent) => {
     if (!this.resizePickerOpen) return;
@@ -79,12 +86,20 @@ class TableControlsView {
 
   update(view: EditorView): void {
     const table = findActiveTableElement(view);
-    if (table !== this.observedTable) {
+    const headerCells = Array.from(table?.rows[0]?.cells ?? []);
+    if (table !== this.observedTable ||
+      headerCells.length !== this.observedHeaderCells.length ||
+      headerCells.some((cell, index) => cell !== this.observedHeaderCells[index])) {
       this.observer?.disconnect();
       this.observedTable = table;
+      this.observedHeaderCells = headerCells;
       if (table) this.observer?.observe(table);
+      // Native columns can redistribute while the table's total width/height stays
+      // unchanged. Observe header geometry only to reposition controls, never size it.
+      for (const cell of headerCells) this.observer?.observe(cell);
     }
     if (!view.editable || !isInTable(view.state) || !table) {
+      this.formatTable = null;
       this.resizePickerOpen = false;
       this.dom.classList.remove('visible');
       this.dom.replaceChildren();
@@ -147,6 +162,7 @@ class TableControlsView {
   destroy(): void {
     cancelAnimationFrame(this.frame);
     this.observer?.disconnect();
+    this.observedHeaderCells = [];
     this.view.dom.removeEventListener('focusin', this.refresh);
     this.view.dom.removeEventListener('mouseup', this.refresh);
     this.view.dom.removeEventListener('keyup', this.refresh);
@@ -491,6 +507,24 @@ class TableControlsView {
     resizeButton.setAttribute('aria-haspopup', 'dialog');
     resizeButton.setAttribute('aria-expanded', String(this.resizePickerOpen));
     bar.appendChild(resizeButton);
+    if (this.options.copyTable) bar.appendChild(
+      this.createUtilityButton(t.copyTable(), 'util-copy-table', this.createActionIcon('copy'), () => {
+        const info = this.getTableInfo();
+        if (info) this.options.copyTable?.(info.node);
+      }),
+    );
+    const formatButton = this.createUtilityButton(t.beautifyTableSource(), 'util-format-table', this.createActionIcon('format'), () =>
+      this.runAndClosePicker(beautifyCurrentTable(this.options.strictMarkdown?.() ?? true)),
+    );
+    const table = this.getTableInfo()?.node;
+    const strict = this.options.strictMarkdown?.() ?? true;
+    if (table !== this.formatTable || strict !== this.formatStrict) {
+      this.formatTable = table ?? null;
+      this.formatStrict = strict;
+      this.formatEnabled = !!table && canBeautifyTable(table, strict);
+    }
+    formatButton.disabled = !this.formatEnabled;
+    bar.appendChild(formatButton);
     bar.appendChild(
       this.createUtilityButton(
         t.deleteTable(),
@@ -531,6 +565,15 @@ class TableControlsView {
   private createHeaderIcon(): HTMLElement {
     const icon = this.el('span', 'util-icon util-icon-header');
     icon.textContent = 'H';
+    return icon;
+  }
+
+  private createActionIcon(action: 'copy' | 'format'): HTMLElement {
+    const icon = this.el('span', `util-icon util-icon-${action}`);
+    icon.setAttribute('aria-hidden', 'true');
+    icon.innerHTML = action === 'copy'
+      ? '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><rect x="8" y="8" width="12" height="13" rx="2"/><path d="M16 8V5a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h3"/></svg>'
+      : '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 4v16M20 4v16M8 6h8M8 12h8M8 18h8"/></svg>';
     return icon;
   }
 

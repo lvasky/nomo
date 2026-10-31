@@ -88,6 +88,28 @@ function readCellAlignment(dom: HTMLElement): TableColumnAlignment | null {
   return value === 'left' || value === 'center' || value === 'right' ? value : null;
 }
 
+const tableNodeSpecs = tableNodes({
+  tableGroup: 'block',
+  cellContent: 'paragraph+',
+  cellAttributes: {
+    align: {
+      default: null,
+      getFromDOM: readCellAlignment,
+      setDOMAttr(value, attrs) {
+        if (value === 'left' || value === 'center' || value === 'right') {
+          attrs['data-align'] = value;
+          attrs.style = `${attrs.style ? `${attrs.style}; ` : ''}text-align: ${value}`;
+        }
+      },
+    },
+  },
+});
+tableNodeSpecs.table = {
+  ...tableNodeSpecs.table,
+  // Source-only revision makes explicit formatting undoable without changing cells.
+  attrs: { sourceFormatRevision: { default: 0 } },
+};
+
 export const schema = new Schema({
   nodes: markdownSchema.spec.nodes
     .update('doc', docNodeSpec)
@@ -105,24 +127,7 @@ export const schema = new Schema({
       }) }],
       toDOM: node => ['pre', ['code', node.attrs.params ? { class: `language-${String(node.attrs.params).split(/\s+/)[0]}` } : {}, 0]],
     })
-    .append(
-      tableNodes({
-        tableGroup: 'block',
-        cellContent: 'paragraph+',
-        cellAttributes: {
-          align: {
-            default: null,
-            getFromDOM: readCellAlignment,
-            setDOMAttr(value, attrs) {
-              if (value === 'left' || value === 'center' || value === 'right') {
-                attrs['data-align'] = value;
-                attrs.style = `${attrs.style ? `${attrs.style}; ` : ''}text-align: ${value}`;
-              }
-            },
-          },
-        },
-      }),
-    )
+    .append(tableNodeSpecs)
     .append({
       /** 空 HTML 锚点没有文本可承载 mark，需作为行内节点保留目标属性。 */
       html_anchor: {

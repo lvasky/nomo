@@ -1,10 +1,12 @@
 import type { Node } from 'prosemirror-model';
-import { Plugin, type Transaction } from 'prosemirror-state';
+import { Plugin, PluginKey, type Transaction } from 'prosemirror-state';
+import { closeHistory } from 'prosemirror-history';
 import type { MarkdownSyncAnchor } from './scrollSyncMapping';
 
 // Only live tables/undo states retain their original source and immutable rows.
 // No DOM, document copies, global string cache or persistent listeners.
 const sources = new WeakMap<Node, { original: Node; lines: string[]; newline: string }>();
+export const tableSourceFormatKey = new PluginKey('tableSourceFormat');
 
 export function rememberTableSources(
   doc: Node,
@@ -62,7 +64,8 @@ function inheritSources(tr: Transaction): void {
         for (const candidate of candidates) {
           const source = sources.get(candidate.node);
           const next = after.nodeAt(map.map(candidate.pos, -1));
-          if (source && next?.type.name === 'table') sources.set(next, source);
+          if (source && next?.type.name === 'table' && !sources.has(next))
+            sources.set(next, source);
         }
       }
     });
@@ -71,10 +74,26 @@ function inheritSources(tr: Transaction): void {
 
 export function tableSourcePlugin(): Plugin {
   return new Plugin({
+    appendTransaction(transactions, _oldState, state) {
+      // Formatting is one undo event, independent of typing before and after it.
+      return transactions.some((tr) => tr.getMeta(tableSourceFormatKey))
+        ? closeHistory(state.tr).setMeta('addToHistory', false)
+        : null;
+    },
     state: {
       init: () => null,
       apply(tr) {
         inheritSources(tr);
+        const formatted = tr.getMeta(tableSourceFormatKey) as
+          | { pos: number; source: string }
+          | undefined;
+        const table = formatted && tr.doc.nodeAt(formatted.pos);
+        if (table?.type.name === 'table')
+          sources.set(table, {
+            original: table,
+            lines: formatted!.source.split(/\r?\n/),
+            newline: formatted!.source.includes('\r\n') ? '\r\n' : '\n',
+          });
         return null;
       },
     },
@@ -153,6 +172,10 @@ export function preserveTableSource(
     result[lineIndex] = patched;
   }
   return result.join(newline);
+}
+
+export function tableSourceCells(line: string): string[] {
+  return cellBounds(line).map(([from, to]) => line.slice(from, to).trim());
 }
 
 function cellBounds(line: string): Array<[number, number]> {

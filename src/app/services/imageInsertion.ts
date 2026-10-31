@@ -6,10 +6,13 @@ import { getSourceTextChanges, type MarkdownSourceEditorHandle, type MarkdownSou
 import { createPerfTimer, logError, logInfo } from '../../lib/services/logger';
 import { t } from '../i18n';
 import { createImageMarkdown, getImageFiles } from './imageMarkdown';
+import { containsClipboardTable, readNativeClipboardTable } from './clipboard';
+import { isDelegatedImagePaste } from '../../lib/editor-core/imagePasteEvents';
 
 interface ImageInsertionOptions {
   getEditor(): EditorCore;
   getStrictMarkdown?(): boolean;
+  getDesktopEnabled?(): boolean;
   getMode(): EditorMode;
   getFileName(): string;
   getNativePath(): string | null;
@@ -35,7 +38,10 @@ export function createImageInsertionHandlers(options: ImageInsertionOptions) {
   const pendingInsertions = new Set<Promise<void>>();
 
   function insertImageFiles(files: File[], target?: ImageInsertionTarget): Promise<void> {
-    const insertion = performImageInsertion(files, target);
+    return trackInsertion(performImageInsertion(files, target), files.length);
+  }
+
+  function trackInsertion(insertion: Promise<void>, fileCount: number): Promise<void> {
     pendingInsertions.add(insertion);
     void insertion.then(
       () => pendingInsertions.delete(insertion),
@@ -44,7 +50,7 @@ export function createImageInsertionHandlers(options: ImageInsertionOptions) {
         logError('ImageInsertion', 'Failed to insert images', {
           error: error instanceof Error ? error.message : String(error),
         });
-        options.setStatusMessage(t.imagesInsertedWithFailures({ inserted: 0, failed: files.length }));
+        options.setStatusMessage(t.imagesInsertedWithFailures({ inserted: 0, failed: fileCount }));
       },
     );
     return insertion;
@@ -71,13 +77,48 @@ export function createImageInsertionHandlers(options: ImageInsertionOptions) {
   }
 
   function handleEditorPaste(event: ClipboardEvent) {
+    // Plain-text paste, readonly handling and a successful HTML paste already
+    // own the event. Only explicitly delegated image pastes need more work.
+    if (event.defaultPrevented && !isDelegatedImagePaste(event)) return;
     const files = getImageFiles(event.clipboardData?.files);
     if (files.length === 0) {
       return;
     }
+    // Let the editor paste Excel's HTML table. Its alternate bitmap is not a
+    // second attachment, even when the same clipboard event reaches this shell.
+    if (containsClipboardTable(event.clipboardData?.getData('text/html') ?? '')) return;
 
     event.preventDefault();
-    void insertImageFiles(files);
+    void trackInsertion(recoverTableOrInsertImages(files), files.length);
+  }
+
+  async function recoverTableOrInsertImages(files: File[]): Promise<void> {
+    if (!options.getDesktopEnabled?.() || options.getMode() !== 'semantic') {
+      return performImageInsertion(files);
+    }
+    const editor = options.getEditor();
+    if (options.isDocumentOpen?.() === false || options.getReadonly?.()) return;
+    const snapshot = editor.getSnapshot();
+    const revision = snapshot.contentRevision ?? snapshot.version;
+    const table = await readNativeClipboardTable();
+    // Native reads are asynchronous; never paste into a closed/replaced document
+    // or overwrite text entered while that read was pending.
+    if (options.isDocumentOpen?.() === false || options.getEditor() !== editor) return;
+    const current = editor.getSnapshot();
+    if (options.getReadonly?.() || options.getMode() !== 'semantic' ||
+      (current.contentRevision ?? current.version) !== revision) {
+      options.setStatusMessage(t.quickInsertSelectionChanged());
+      return;
+    }
+    if (snapshot.selection) editor.restoreSelectionSnapshot(snapshot.selection);
+    if (table) {
+      editor.pasteClipboard(table);
+      return;
+    }
+    return performImageInsertion(files, snapshot.selection ? {
+      selection: snapshot.selection,
+      contentRevision: revision,
+    } : undefined);
   }
 
   async function performImageInsertion(files: File[], target?: ImageInsertionTarget) {
