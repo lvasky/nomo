@@ -11,6 +11,12 @@ interface TocRow {
   number: number;
 }
 
+// Only mounted TOC views are retained; destroy removes each registration.
+const mountedTocs = new WeakMap<EditorView, Set<TocBlockNodeView>>();
+export function refreshMarkerTocViews(view: EditorView): void {
+  for (const toc of mountedTocs.get(view) ?? []) toc.refreshMarker();
+}
+
 /** 正文目录块 NodeView：目录自身不可编辑，目录项只负责导航到正文标题。 */
 export class TocBlockNodeView {
   dom: HTMLElement;
@@ -26,6 +32,12 @@ export class TocBlockNodeView {
     this.dom = document.createElement('section');
     this.dom.className = 'toc-block';
     this.dom.setAttribute('contenteditable', 'false');
+    let mounted = mountedTocs.get(view);
+    if (!mounted) {
+      mounted = new Set<TocBlockNodeView>();
+      mountedTocs.set(view, mounted);
+    }
+    mounted.add(this);
     this.unsubscribeLocale = onInterfaceLocaleChanged(() => this.render());
     this.render();
   }
@@ -56,6 +68,13 @@ export class TocBlockNodeView {
 
   destroy(): void {
     this.unsubscribeLocale();
+    const mounted = mountedTocs.get(this.view);
+    mounted?.delete(this);
+    if (!mounted?.size) mountedTocs.delete(this.view);
+  }
+
+  refreshMarker(): void {
+    if (this.node.attrs.sourceMarker !== null) this.render();
   }
 
   private render(): void {
@@ -75,7 +94,11 @@ export class TocBlockNodeView {
     header.appendChild(deleteButton);
     this.dom.appendChild(header);
 
-    const rows = parseTocRows(String(this.node.attrs.content ?? ''));
+    const rows: TocRow[] = this.node.attrs.sourceMarker !== null
+      ? extractDocumentTocItems(this.view.state.doc).map((item, index) => ({
+        title: item.title, id: item.id, level: item.level, number: index + 1,
+      }))
+      : parseTocRows(String(this.node.attrs.content ?? ''));
     if (rows.length === 0) {
       const empty = document.createElement('p');
       empty.className = 'toc-empty';

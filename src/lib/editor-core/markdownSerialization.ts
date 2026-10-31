@@ -138,6 +138,11 @@ const tableMarkdownSerializer = new MarkdownSerializer(
       state.closeBlock(node);
     },
     toc_block(state, node) {
+      if (node.attrs.sourceMarker !== null) {
+        state.text(String(node.attrs.sourceMarker), false);
+        state.closeBlock(node);
+        return;
+      }
       const content = String(node.attrs.content ?? '').replace(/^(?:[ \t]*\r?\n)+|(?:\r?\n[ \t]*)+$/g, '');
       state.text(
         [TOC_START_MARKER, ...(content ? [content] : []), TOC_END_MARKER].join('\n'),

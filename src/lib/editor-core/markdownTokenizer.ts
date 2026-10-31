@@ -144,6 +144,19 @@ export function recordInlineSourceRanges(markdown: MarkdownIt): void {
 export function createMarkdownTokenizer(options: { inlineSource?: boolean; literalHtmlCode?: boolean } = {}): MarkdownIt {
   const markdownIt = MarkdownIt('commonmark', { html: true }).enable(['table', 'strikethrough']);
   markdownIt.validateLink = (url: string) => normalizeLinkHref(url) !== null;
+  markdownIt.block.ruler.before('heading', 'toc_marker', (state, startLine, _endLine, silent) => {
+    if (state.sCount[startLine] - state.blkIndent >= 4) return false;
+    const source = state.getLines(startLine, startLine + 1, state.blkIndent, false);
+    // Raw block syntax only: backticks, escaped brackets and fenced code cannot match.
+    if (!/^[ \t]*\[TOC\][ \t]*$/.test(source)) return false;
+    if (silent) return true;
+    const token = state.push('toc_block', '', 0);
+    token.block = true;
+    token.map = [startLine, startLine + 1];
+    token.meta = { sourceMarker: source };
+    state.line = startLine + 1;
+    return true;
+  }, { alt: ['paragraph', 'reference', 'blockquote', 'list'] });
   let scriptDepth = 0;
   markdownIt.inline.ruler.before('escape', 'script_space', (state, silent) => {
     if (!scriptDepth || state.src[state.pos] !== '\\' || !/[ \t]/.test(state.src[state.pos + 1] ?? '')) return false;

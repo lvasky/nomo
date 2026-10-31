@@ -72,7 +72,7 @@
 | Callout NodeView | `src/lib/editor-core/nodeViews/CalloutNodeView.ts` | `src/lib/editor-core/callout/` | 提示块展示/编辑变更 |
 | 折叠块 NodeView | `src/lib/editor-core/nodeViews/DetailsNodeView.ts` | `details/detailsState.ts`, `details/detailsCommands.ts`, `src/app/styles/editor-document.css`, `src/lib/typography/exportPrint.ts`, `exportRuntime.ts` | 修改箭头/块菜单、组字结束后收起与光标恢复、共享正文 DOM 显隐、原生 HTML 展开重排及打印前递归展开 |
 | HTML 块 NodeView | `src/lib/editor-core/nodeViews/HtmlBlockNodeView.ts` | `src/lib/editor-core/html/` | 可编辑 HTML 块行为变更 |
-| TOC 块 NodeView | `src/lib/editor-core/nodeViews/TocBlockNodeView.ts` | `src/lib/toc/tocService.ts` | 文档内目录展示变更 |
+| TOC 块 NodeView | `src/lib/editor-core/nodeViews/TocBlockNodeView.ts` | `src/lib/toc/tocService.ts`, `plugins/tocSync.ts`, `markdownTokenizer.ts`, `markdownSerialization.ts` | 文档内目录展示；独占一行的 `[TOC]` 为只派生显示的动态目录，保存保留原标记；代码中的标记不转换 |
 | 注释块/行内注释 NodeView | `src/lib/editor-core/nodeViews/CommentBlockNodeView.ts`, `CommentInlineNodeView.ts` | `src/lib/editor-core/nodeViews/activeEditRegistry.ts` | 注释卡片展示/编辑/编辑态协调 |
 | 脚注 NodeView | `src/lib/editor-core/nodeViews/FootnoteDefNodeView.ts`, `FootnoteRefNodeView.ts` | — | 脚注定义/引用展示、跳转、预览 |
 | 分割线 NodeView | `src/lib/editor-core/nodeViews/HorizontalRuleNodeView.ts` | — | 水平分割线渲染/选中 |
@@ -98,7 +98,7 @@
 | 八类行内字符命令 | `src/lib/editor-core/inlineSourceCommands.ts` | `editorCommands.ts`, `ProseMirrorEditorCore.ts` | 工具栏/快捷键包裹、上下标互斥切换、局部取消、清除格式与空模板；pendingInlineMarks 为兼容派生接口 |
 | 搜索高亮 | `src/lib/editor-core/plugins/searchHighlight.ts` | `src/app/services/searchReplace.ts` | 搜索/替换高亮 |
 | 尾部段落补全 | `src/lib/editor-core/plugins/trailingParagraph.ts` | — | 非段落块插入后自动追加空段落 |
-| 正文目录事务同步 | `src/lib/editor-core/plugins/tocSync.ts` | `src/lib/toc/tocService.ts` | 标题变化后的 TOC 派生更新与撤销历史保持 |
+| 正文目录事务同步 | `src/lib/editor-core/plugins/tocSync.ts` | `src/lib/toc/tocService.ts`, `src/lib/editor-core/nodeViews/TocBlockNodeView.ts` | 标题变化后更新旧注释目录的派生内容；`[TOC]` 仅刷新挂载视图，不展开源码或新增派生事务；撤销历史保持 |
 | 编辑器上下文菜单插件 | `src/lib/editor-core/plugins/contextMenu.ts` | `src/app/App.svelte`, `src/app/components/ContextMenu.svelte` | 语义编辑区目标命中、选区定位与右键菜单事件分发 |
 | 快捷插入菜单 | `src/lib/editor-core/plugins/quickInsert.ts` | `src/lib/editor-core/quickInsert.ts`, `editorCommands.ts`, `src/app/styles/editor-quick-insert.css` | 行首/空格后触发、类别/样式键盘导航、浮层定位与生命周期，无搜索 |
 | Emoji 短代码建议 | `src/lib/editor-core/plugins/emojiSuggestions.ts`, `src/lib/emoji/sourceSuggestions.ts` | `src/lib/emoji/suggestions.ts`, `sourceContext.ts`, `ProseMirrorEditorCore.ts`, `MarkdownSourceEditor.svelte` | 语义/源码的冒号补全、代码与公式排除、组字保护、确认与撤销、浮层生命周期 |

@@ -326,10 +326,18 @@ export const schema = new Schema({
         group: 'block',
         attrs: {
           content: { default: '' },
+          sourceMarker: { default: null },
         },
         toDOM(node) {
-          return ['div', { class: 'toc-block', 'data-content': node.attrs.content }, t.toc()];
+          return ['div', { class: 'toc-block', 'data-content': node.attrs.content,
+            ...(node.attrs.sourceMarker !== null ? { 'data-toc-source-marker': node.attrs.sourceMarker } : {}),
+          }, t.toc()];
         },
+        parseDOM: [{ tag: 'div.toc-block[data-toc-source-marker]', getAttrs(dom) {
+          const sourceMarker = (dom as HTMLElement).getAttribute('data-toc-source-marker');
+          return sourceMarker !== null && /^[ \t]*\[TOC\][ \t]*$/.test(sourceMarker)
+            ? { sourceMarker } : false;
+        } }],
       },
       math_block: {
         atom: true,

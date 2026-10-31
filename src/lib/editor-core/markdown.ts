@@ -44,7 +44,10 @@ const tableMarkdownParser = new MarkdownParser(schema, markdownIt, {
       order: Number(tok.attrGet('start') ?? 1),
     }),
   },
-  toc_block: { node: 'toc_block', getAttrs: (tok: Token) => ({ content: tok.content }) },
+  toc_block: { node: 'toc_block', getAttrs: (tok: Token) => ({
+    content: tok.content,
+    sourceMarker: tok.meta?.sourceMarker ?? null,
+  }) },
   link_open: {
     mark: 'link',
     getAttrs: (tok: Token) =>
@@ -956,6 +959,16 @@ function getTableCellAttrs(token: { attrGet(name: string): string | null }): {
 
 export function createMarkdownInputRules() {
   return [
+    new InputRule(/^\[TOC\]$/, (state, _match, start, end) => {
+      const $start = state.doc.resolve(start);
+      if ($start.parent.type !== schema.nodes.paragraph || end !== $start.end() ||
+        state.doc.rangeHasMark(start, end, schema.marks.code) ||
+        (state.storedMarks ?? $start.marks()).some(mark => mark.type === schema.marks.code)) return null;
+      const index = $start.index(-1);
+      if (!$start.node(-1).canReplaceWith(index, index + 1, schema.nodes.toc_block)) return null;
+      return state.tr.replaceWith($start.before(), $start.after(),
+        schema.nodes.toc_block.create({ sourceMarker: '[TOC]' }));
+    }),
     createMathInlineInputRule(),
     textblockTypeInputRule(/^(#{1,6})\s$/, schema.nodes.heading, (match) => ({
       level: match[1].length,

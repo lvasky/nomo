@@ -173,13 +173,17 @@ export function escapeInlineSourceLiteral(text: string, options: { linkLabel?: b
 
 /** Protect block-only syntax while serializing a paragraph that must stay literal. */
 export function escapeLiteralBlockSyntax(source: string): string {
-  if (!source.includes('|') && !source.includes('$$')) return source;
+  if (!source.includes('|') && !source.includes('$$') && !source.includes('[TOC]')) return source;
   const lines = source.split('\n');
   const starts = [0];
   for (let i = 0; i < source.length; i++) if (source[i] === '\n') starts.push(i + 1);
   const code = analyzeInlineSourceText(source).spans.filter((span) => span.type === 'code');
   const protectedLine = (line: number) => code.some((span) => starts[line] >= span.openFrom && starts[line] < span.closeTo);
   for (const token of tokenizer.parse(source, {})) {
+    if (token.type === 'toc_block' && typeof token.meta?.sourceMarker === 'string' && token.map) {
+      const line = token.map[0];
+      if (!protectedLine(line)) lines[line] = lines[line].replace(/^(\s*)\[/, '$1\\[');
+    }
     if (token.type === 'table_open' && token.map) {
       const separator = token.map[0] + 1;
       if (!protectedLine(separator)) lines[separator] = lines[separator].replace(/^(\s*)([|:-])/, '$1\\$2');

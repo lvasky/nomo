@@ -3,6 +3,7 @@ import { Plugin, PluginKey, type Transaction } from 'prosemirror-state';
 import { Decoration, DecorationSet } from 'prosemirror-view';
 import { createDocumentTocList, extractDocumentTocItems } from '../../toc/tocService';
 import { schema } from '../schema';
+import { refreshMarkerTocViews } from '../nodeViews/TocBlockNodeView';
 
 const tocSyncKey = new PluginKey('tocSync');
 
@@ -17,6 +18,19 @@ export function tocSyncPlugin(): Plugin {
   let headingDecorations = DecorationSet.empty;
   return new Plugin({
     key: tocSyncKey,
+    view() {
+      return {
+        update(view, previousState) {
+          if (view.state.doc === previousState.doc) return;
+          const previous = extractDocumentTocItems(previousState.doc);
+          const current = extractDocumentTocItems(view.state.doc);
+          if (previous.length !== current.length || current.some((item, index) => {
+            const old = previous[index];
+            return item.id !== old.id || item.title !== old.title || item.level !== old.level;
+          })) refreshMarkerTocViews(view);
+        },
+      };
+    },
     props: {
       decorations(state) {
         if (decoratedDoc !== state.doc) {
@@ -59,7 +73,9 @@ function collectTocNodes(doc: ProseMirrorNode): Array<{ node: ProseMirrorNode; p
   const tocNodes: Array<{ node: ProseMirrorNode; pos: number }> = [];
   doc.descendants((node, pos) => {
     if (node.type === schema.nodes.toc_block) {
-      tocNodes.push({ node, pos });
+      // [TOC] is display-only. Heading changes must never expand its source
+      // or add derived attributes/extra undo transactions to the document.
+      if (node.attrs.sourceMarker === null) tocNodes.push({ node, pos });
       return false;
     }
     return true;
