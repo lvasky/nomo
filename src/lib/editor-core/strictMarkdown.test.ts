@@ -37,6 +37,28 @@ afterEach(() => {
 });
 
 describe('strict Markdown', () => {
+  it.each(['PRI->Stage ', 'PRI-\\>Stage '])('copies ordinary arrows without unnecessary greater-than escapes: %s', (source) => {
+    const { editor, view } = open(source);
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 1, view.state.doc.firstChild!.nodeSize - 1)));
+    expect(editor.getClipboardPayload()?.text).toBe('PRI->Stage');
+    expect(editor.getMarkdown()).toBe(source);
+  });
+
+  it('does not add greater-than escapes when pasting and copying plain arrow text', () => {
+    const { editor, view } = open('');
+    editor.pasteClipboard({ text: 'PRI->Stage ' }, { mode: 'plain' });
+    selectText(view, 'PRI->Stage ');
+    expect(editor.getClipboardPayload()?.text).toBe('PRI->Stage ');
+  });
+
+  it('preserves code backslashes and necessary literal quote escapes when copying', () => {
+    const { editor, view } = open('`PRI-\\>Stage` and \\> quote');
+    view.dispatch(view.state.tr.setSelection(TextSelection.create(view.state.doc, 1, view.state.doc.firstChild!.nodeSize - 1)));
+    expect(editor.getClipboardPayload()?.text).toContain('`PRI-\\>Stage`');
+    editor.setMarkdown('\\> quote');
+    selectText(view, '\\> quote');
+    expect(editor.getClipboardPayload()?.text).toBe('\\> quote');
+  });
   it('is enabled by default, blocks automatic HTML commands and supports an explicit opt-out', () => {
     const { editor, view } = open('hello');
     selectText(view, 'hello');

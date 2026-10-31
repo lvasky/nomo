@@ -115,7 +115,7 @@ export function inlineFormatDelimiters(
 /** 纯文本粘贴显式转义，避免在新模型里意外变成 Markdown 格式。 */
 export function escapeInlineSourceLiteral(text: string): string {
   return text.replace(
-    /[\\`*_~^<>\[\]$]|&(?=#(?:x[\da-f]+|\d+);|[a-z][a-z\d]+;)/gi,
+    /[\\`*_~^<\[\]$]|&(?=#(?:x[\da-f]+|\d+);|[a-z][a-z\d]+;)/gi,
     (character) => `\\${character}`,
   );
 }
@@ -510,7 +510,7 @@ function materializeSourceNode(
         const escaped = literal
           ? new Set(
               Array.from(
-                raw.matchAll(/[\\`*_~^<>\[\]$]|&(?=#(?:x[\da-f]+|\d+);|[a-z][a-z\d]+;)/gi),
+                raw.matchAll(/[\\`*_~^<\[\]$]|&(?=#(?:x[\da-f]+|\d+);|[a-z][a-z\d]+;)/gi),
                 (match) => match.index,
               ),
             )

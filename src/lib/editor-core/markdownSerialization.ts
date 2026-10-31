@@ -215,7 +215,8 @@ const tableMarkdownSerializer = new MarkdownSerializer(
     text(state, node, parent) {
       if (isInlineSourceText(node)) {
         const from = (state as unknown as { out: string }).out.length;
-        state.text(node.text ?? '', false);
+        state.text('clipboard' in state.options && state.options.clipboard === true
+          ? minimizeClipboardGreaterThanEscapes(node.text ?? '') : node.text ?? '', false);
         if (node.marks.some((mark) => mark.type.name === 'inline_source' && mark.attrs.literal === true)) {
           paragraphSyntaxRanges.get(state)?.push({ from, to: (state as unknown as { out: string }).out.length });
         }
@@ -437,7 +438,8 @@ export function serializeMarkdownSelection(
   options: { strictMarkdown?: boolean; tightLists?: boolean } = {},
 ): string | null {
   const selected = extractMarkdownSelection(doc, from, to);
-  return selected ? serializeMarkdown(selected, options) : null;
+  const serializationOptions = { ...options, clipboard: true };
+  return selected ? serializeMarkdown(selected, serializationOptions) : null;
 }
 
 /** 使用相同序列化规则计量，不构建大选区的整段 Markdown 字符串。 */
@@ -480,6 +482,17 @@ export function measureMarkdownSelection(
   });
   consume(state.out);
   return { chars, lines: breaks + 1 };
+}
+
+/** A greater-than sign needs no escape within ordinary prose; keep code and quote boundaries. */
+function minimizeClipboardGreaterThanEscapes(source: string): string {
+  const code = analyzeInlineSourceText(source).spans.filter((span) => span.type === 'code');
+  return source.replace(/(\\+)>/g, (match, slashes: string, offset: number) => {
+    if (slashes.length % 2 === 0 || code.some((span) => offset >= span.openFrom && offset < span.closeTo)) return match;
+    const lineStart = source.lastIndexOf('\n', offset - 1) + 1;
+    if (/^ {0,3}$/.test(source.slice(lineStart, offset))) return match;
+    return slashes.slice(1) + '>';
+  });
 }
 
 function extractMarkdownSelection(
@@ -872,7 +885,7 @@ function renderParagraphInline(state: MarkdownSerializerState, node: ProseMirror
 
 function escapeMarkdownBlockStart(text: string): string {
   return text.replace(
-    /^(\s{0,3})(#{1,6}(?:\s|$)|>(?:\s|$)|[-+*](?:\s|$)|\d+[.)](?:\s|$)|`{3,}(?=[^`]*$)|~{3,}|(?:[-*_]\s*){3,}$|=+\s*$)/,
+    /^(\s{0,3})(#{1,6}(?:\s|$)|>|[-+*](?:\s|$)|\d+[.)](?:\s|$)|`{3,}(?=[^`]*$)|~{3,}|(?:[-*_]\s*){3,}$|=+\s*$)/,
     (_match, indentation: string, marker: string) =>
       /^\d+[.)]/.test(marker)
         ? `${indentation}${marker.replace(/[.)]/, '\\$&')}`
