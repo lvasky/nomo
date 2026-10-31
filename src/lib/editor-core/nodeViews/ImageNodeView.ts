@@ -58,6 +58,7 @@ export class ImageNodeView {
     node: ProseMirrorNode,
     private readonly view: EditorView,
     private readonly getImageContext: () => ImageContext,
+    private readonly strictMarkdown: () => boolean = () => false,
   ) {
     this.node = node;
     this.dom = document.createElement('span');
@@ -310,7 +311,7 @@ export class ImageNodeView {
     const disabled = !this.view.editable;
 
     const setNodeAttr = (name: string, value: unknown) => {
-      if (!this.view.editable || this.view.isDestroyed) return;
+      if (!this.view.editable || this.view.isDestroyed || this.strictMarkdown()) return;
       const pos = this.findOwnPos();
       if (pos < 0) return;
       const attrs = { ...this.node.attrs, [name]: value };
@@ -329,21 +330,21 @@ export class ImageNodeView {
       {
         label: t.alignLeft(),
         icon: 'align-left',
-        disabled,
+        disabled: disabled || this.strictMarkdown(),
         action: () => setNodeAttr('align', 'left'),
         active: align === 'left',
       },
       {
         label: t.alignCenter(),
         icon: 'align-center',
-        disabled,
+        disabled: disabled || this.strictMarkdown(),
         action: () => setNodeAttr('align', 'center'),
         active: align === 'center',
       },
       {
         label: t.alignRight(),
         icon: 'align-right',
-        disabled,
+        disabled: disabled || this.strictMarkdown(),
         action: () => setNodeAttr('align', 'right'),
         active: align === 'right',
       },
@@ -351,14 +352,14 @@ export class ImageNodeView {
       {
         label: t.originalSize(),
         icon: 'image',
-        disabled,
+        disabled: disabled || this.strictMarkdown(),
         action: () => setNodeAttr('width', null),
         active: !width,
       },
       {
         label: t.setSize(),
         icon: 'edit',
-        disabled,
+        disabled: disabled || this.strictMarkdown(),
         action: () => this.openSizeEditor(),
       },
       {
@@ -418,7 +419,7 @@ export class ImageNodeView {
 
   /** 打开尺寸编辑内联浮层 */
   private openSizeEditor(): void {
-    if (!this.view.editable || this.view.isDestroyed) return;
+    if (!this.view.editable || this.view.isDestroyed || this.strictMarkdown()) return;
     // 关闭已有的浮层
     this.closeSizeEditor();
 
@@ -630,6 +631,7 @@ export class ImageNodeView {
   }
 
   private setImageWidth(width: string | null): void {
+    if (this.strictMarkdown()) return;
     if (!this.view.editable || this.view.isDestroyed) return;
     const pos = this.findOwnPos();
     if (pos < 0) return;

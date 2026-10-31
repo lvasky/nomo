@@ -13,6 +13,7 @@ import {
   isRetainedInlineToken,
   materializeInlineSource,
 } from './InlineSourceCodec';
+import { rememberTableSources } from './tableSource';
 import { serializeMarkdown } from './markdownSerialization';
 export { serializeMarkdown, serializeMarkdownSelection } from './markdownSerialization';
 import { InputRule, textblockTypeInputRule } from 'prosemirror-inputrules';
@@ -807,7 +808,16 @@ export function tryParseMarkdown(markdown: string, options: { exportImageSources
   resetHtmlInlineStack();
   try {
     const { frontMatterPrefix, body } = splitMarkdownDocument(markdown);
-    const parsed = tableMarkdownParser.parse(preprocessImageHtml(body));
+    if (!body.includes('|')) {
+      const parsed = tableMarkdownParser.parse(preprocessImageHtml(body));
+      return parsed.type.create({ ...parsed.attrs, frontMatterPrefix }, parsed.content, parsed.marks);
+    }
+    const preprocessed = preprocessImageHtmlWithProvenance(body);
+    const { doc: parsed, anchors } = parseWithSyncAnchors(tableMarkdownParser, preprocessed.markdown, (line, end) => {
+      const provenance = preprocessed.lineProvenance[line];
+      return provenance ? (end ? provenance.toLine : provenance.fromLine) : undefined;
+    });
+    rememberTableSources(parsed, body, anchors);
     return parsed.type.create({ ...parsed.attrs, frontMatterPrefix }, parsed.content, parsed.marks);
   } catch {
     return null;
@@ -866,6 +876,7 @@ export function parseMarkdownWithSyncAnchors(markdown: string): {
       const provenance = preprocessed.lineProvenance[line];
       return provenance ? (end ? provenance.toLine : provenance.fromLine) + lineOffset : undefined;
     });
+    rememberTableSources(result.doc, markdown, result.anchors);
     return {
       doc: result.doc.type.create({ ...result.doc.attrs, frontMatterPrefix }, result.doc.content, result.doc.marks),
       anchors: result.anchors,

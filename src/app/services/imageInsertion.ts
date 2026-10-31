@@ -9,6 +9,7 @@ import { createImageMarkdown, getImageFiles } from './imageMarkdown';
 
 interface ImageInsertionOptions {
   getEditor(): EditorCore;
+  getStrictMarkdown?(): boolean;
   getMode(): EditorMode;
   getFileName(): string;
   getNativePath(): string | null;
@@ -211,8 +212,9 @@ export function createImageInsertionHandlers(options: ImageInsertionOptions) {
     const start = selection?.from ?? markdown.length;
     const end = selection?.to ?? start;
     const imageSettings = options.getImageContext().settings;
-    const width = imageSettings?.defaultImageWidth || '';
-    const align = imageSettings?.defaultImageAlign ?? 'none';
+    const strictMarkdown = options.getStrictMarkdown?.() ?? true;
+    const width = strictMarkdown ? '' : imageSettings?.defaultImageWidth || '';
+    const align = strictMarkdown ? 'none' : imageSettings?.defaultImageAlign ?? 'none';
 
     const snippet = items
       .map((item) => {

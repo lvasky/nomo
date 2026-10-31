@@ -10,6 +10,7 @@ import {
   type Node as ProseMirrorNode,
   type ResolvedPos,
 } from 'prosemirror-model';
+import { preserveTableSource } from './tableSource';
 import { schema, type TableColumnAlignment } from './schema';
 import { serializeHtmlBlock, serializeHtmlInlineContent } from './html/pmToHtml';
 import { serializeHtmlAnchorOpen } from './html/htmlAnchor';
@@ -111,7 +112,7 @@ const tableMarkdownSerializer = new MarkdownSerializer(
       });
     },
     table(state, node) {
-      state.text(serializeTable(node), false);
+      state.text(serializeTable(node, strictMode(state)), false);
       state.closeBlock(node);
     },
     table_row() {
@@ -250,19 +251,19 @@ const tableMarkdownSerializer = new MarkdownSerializer(
     em: {
       ...defaultMarkdownSerializer.marks.em,
       open(_state, mark, parent, index) {
-        return emphasisNeedsHtml(mark, parent, index) ? '<em>' : '*';
+        return !strictMode(_state) && emphasisNeedsHtml(mark, parent, index) ? '<em>' : '*';
       },
       close(_state, mark, parent, index) {
-        return emphasisNeedsHtml(mark, parent, index) ? '</em>' : '*';
+        return !strictMode(_state) && emphasisNeedsHtml(mark, parent, index) ? '</em>' : '*';
       },
     },
     strong: {
       ...defaultMarkdownSerializer.marks.strong,
       open(_state, mark, parent, index) {
-        return emphasisNeedsHtml(mark, parent, index) ? '<strong>' : '**';
+        return !strictMode(_state) && emphasisNeedsHtml(mark, parent, index) ? '<strong>' : '**';
       },
       close(_state, mark, parent, index) {
-        return emphasisNeedsHtml(mark, parent, index) ? '</strong>' : '**';
+        return !strictMode(_state) && emphasisNeedsHtml(mark, parent, index) ? '</strong>' : '**';
       },
     },
     strikethrough: {
@@ -311,7 +312,7 @@ const tableCellMarkdownSerializer = new MarkdownSerializer(
       state.renderInline(node, false);
     },
     hard_break(state, node) {
-      state.write(node.attrs.soft === true ? '<br data-nomo-break="soft">' : '<br>');
+      state.write(strictMode(state) || node.attrs.soft !== true ? '<br>' : '<br data-nomo-break="soft">');
     },
     comment_inline(state, node, parent, index) {
       const content = String(node.attrs.content ?? '');
@@ -398,8 +399,12 @@ function hasFollowingInlineContent(parent: ProseMirrorNode, index: number): bool
   return false;
 }
 
-export function serializeMarkdown(doc: ProseMirrorNode): string {
-  return `${String(doc.attrs.frontMatterPrefix ?? '')}${tableMarkdownSerializer.serialize(doc)}`;
+function strictMode(state: MarkdownSerializerState): boolean {
+  return 'strictMarkdown' in state.options && state.options.strictMarkdown === true;
+}
+
+export function serializeMarkdown(doc: ProseMirrorNode, options: { strictMarkdown?: boolean; tightLists?: boolean } = {}): string {
+  return `${String(doc.attrs.frontMatterPrefix ?? '')}${tableMarkdownSerializer.serialize(doc, options)}`;
 }
 
 interface MarkdownSelectionExtraction {
@@ -429,9 +434,10 @@ export function serializeMarkdownSelection(
   doc: ProseMirrorNode,
   from: number,
   to: number,
+  options: { strictMarkdown?: boolean; tightLists?: boolean } = {},
 ): string | null {
   const selected = extractMarkdownSelection(doc, from, to);
-  return selected ? serializeMarkdown(selected) : null;
+  return selected ? serializeMarkdown(selected, options) : null;
 }
 
 /** 使用相同序列化规则计量，不构建大选区的整段 Markdown 字符串。 */
@@ -706,14 +712,16 @@ function flushPendingClosedBlock(state: unknown): void {
   (state as { flushClose(): void }).flushClose();
 }
 
-function serializeTable(table: ProseMirrorNode): string {
+function serializeTable(table: ProseMirrorNode, strictMarkdown = false): string {
   const rows: ProseMirrorNode[] = [];
   table.forEach((row) => rows.push(row));
   if (rows.length === 0) return '';
-  if (requiresHtmlTable(rows)) return serializeHtmlTable(table);
+  const preserved = preserveTableSource(table, (cell) => serializeTableCell(cell, strictMarkdown));
+  if (preserved !== null) return preserved;
+  if (requiresHtmlTable(rows, strictMarkdown)) return serializeHtmlTable(table);
 
   const columnCount = Math.max(...rows.map((row) => row.childCount));
-  const serializedRows = rows.map((row) => serializeTableRow(row, columnCount));
+  const serializedRows = rows.map((row) => serializeTableRow(row, columnCount, strictMarkdown));
   const alignments = Array.from({ length: columnCount }, (_, index) =>
     readColumnAlignment(rows, index),
   );
@@ -729,7 +737,7 @@ function serializeTable(table: ProseMirrorNode): string {
 }
 
 /** GFM 只表示单层矩形、首行表头和逐列统一对齐；其它语义保留 HTML。 */
-function requiresHtmlTable(rows: ProseMirrorNode[]): boolean {
+function requiresHtmlTable(rows: ProseMirrorNode[], strictMarkdown: boolean): boolean {
   const width = rows[0].childCount;
   return rows.some((row, rowIndex) => {
     if (row.childCount !== width) return true;
@@ -738,7 +746,7 @@ function requiresHtmlTable(rows: ProseMirrorNode[]): boolean {
       const expectedType = rowIndex === 0 ? schema.nodes.table_header : schema.nodes.table_cell;
       if (
         cell.type !== expectedType || cell.attrs.colspan !== 1 || cell.attrs.rowspan !== 1 ||
-        cell.attrs.colwidth !== null || cell.childCount !== 1 ||
+        cell.attrs.colwidth !== null || (!strictMarkdown && cell.childCount !== 1) ||
         cell.attrs.align !== rows[0].child(column).attrs.align
       ) return true;
     }
@@ -770,16 +778,17 @@ function serializeHtmlTable(table: ProseMirrorNode): string {
   return '<table data-nomo-table="semantic"><tbody>' + rows.join('') + '</tbody></table>';
 }
 
-function serializeTableRow(row: ProseMirrorNode, columnCount: number): string[] {
+function serializeTableRow(row: ProseMirrorNode, columnCount: number, strictMarkdown: boolean): string[] {
   const cells: string[] = [];
-  row.forEach((cell) => cells.push(serializeTableCell(cell)));
+  row.forEach((cell) => cells.push(serializeTableCell(cell, strictMarkdown)));
   while (cells.length < columnCount) cells.push('');
   return cells;
 }
 
-function serializeTableCell(cell: ProseMirrorNode): string {
+function serializeTableCell(cell: ProseMirrorNode, strictMarkdown = false): string {
   // 表格分隔符只在最终输出时转义，不能删除正文或代码中的反斜杠。
-  return tableCellMarkdownSerializer.serialize(cell).replace(/\n/g, ' ').replace(/\|/g, '\\|').trim();
+  const options = { tightLists: false, strictMarkdown };
+  return tableCellMarkdownSerializer.serialize(cell, options).replace(/\n/g, ' ').replace(/\|/g, '\\|').trim();
 }
 
 function splitTaskParagraph(

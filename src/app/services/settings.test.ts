@@ -34,6 +34,15 @@ beforeEach(() => {
 });
 
 describe('settings', () => {
+  it('defaults to strict Markdown and persists an explicit opt-out', async () => {
+    expect(normalizeAppPreferences({}).strictMarkdown).toBe(true);
+    expect(normalizeAppPreferences({ strictMarkdown: 'false' }).strictMarkdown).toBe(true);
+    const preferences = normalizeAppPreferences({ strictMarkdown: false });
+    await saveAppPreferences(true, preferences, ['strictMarkdown']);
+    expect(storageMock.updateAppSettings).toHaveBeenCalledWith({ strictMarkdown: false });
+    expect((await loadAppPreferences(true, [createSetting('strictMarkdown', false)])).strictMarkdown).toBe(false);
+    expect((await loadAppPreferences(true, [createSetting('strictMarkdown', true)])).strictMarkdown).toBe(true);
+  });
   it('uses one typography switch and ignores retired secondary preferences', () => {
     const previous = getTypographyOptions();
     const legacyPreferences = {

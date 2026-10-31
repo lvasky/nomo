@@ -5,6 +5,17 @@ import type { MarkdownSourceEditorHandle } from '../components/markdownSourceEdi
 import { createEditorInteractionController } from './editorInteractionController';
 
 describe('editorInteractionController viewport layout', () => {
+  it('blocks generated HTML in source mode while leaving manually entered HTML alone', () => {
+    const textarea = createTextarea({ scrollHeight: 100, clientHeight: 100 });
+    textarea.value = '<u>manually entered</u>';
+    const editor = createEditorCoreStub();
+    const controller = createController({ mode: 'source', strictMarkdown: true, editor,
+      sourceTextarea: textarea, sourcePane: undefined, semanticPane: undefined });
+    controller.runCommand({ type: 'insertDetails' });
+    controller.runCommand({ type: 'toggleUnderline' });
+    expect(textarea.value).toBe('<u>manually entered</u>');
+    expect(editor.execute).not.toHaveBeenCalled();
+  });
   let originalRequestAnimationFrame: typeof window.requestAnimationFrame;
 
   beforeEach(() => {
@@ -299,6 +310,7 @@ describe('editorInteractionController viewport layout', () => {
 });
 
 function createController(options: {
+  strictMarkdown?: boolean;
   mode: EditorMode | { value: EditorMode };
   sourcePane: HTMLElement | undefined;
   semanticPane: HTMLElement | undefined;
@@ -310,6 +322,7 @@ function createController(options: {
 }) {
   const pendingSourceScrollTop = options.pendingSourceScrollTop ?? { value: null };
   return createEditorInteractionController({
+    getStrictMarkdown: () => options.strictMarkdown ?? false,
     getEditor: () => options.editor ?? createEditorCoreStub(),
     getLargeDocumentMode: () => false,
     getMode: () => (typeof options.mode === 'string' ? options.mode : options.mode.value),

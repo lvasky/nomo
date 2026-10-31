@@ -192,8 +192,9 @@ describe('inline source editor integration', () => {
     target.remove();
   });
 
-  it('materializes HTML paste and projects all six formats for export', () => {
+  it('materializes HTML paste and projects all six formats for export when strict Markdown is disabled', () => {
     const { editor, view, destroy } = setup('');
+    editor.updateOptions({ strictMarkdown: false });
     editor.pasteClipboardHtml(
       '<p><strong>粗</strong> <em>斜</em> <code>x*y</code> <s>删</s> <u>线</u> <mark>亮</mark></p>',
     );

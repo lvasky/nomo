@@ -132,7 +132,7 @@ afterEach(() => { editors.splice(0).forEach(editor => editor.destroy()); documen
 function editorFixture(markdown = block()) {
   const root = document.createElement('div');
   document.body.append(root);
-  const editor = createEditorCore({ markdown, target: root });
+  const editor = createEditorCore({ markdown, target: root, strictMarkdown: false });
   editors.push(editor);
   const view = () => (editor as unknown as { view: EditorView }).view;
   view().setProps({ editable: () => true });

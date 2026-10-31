@@ -2060,6 +2060,20 @@
                 <span class="toggle-switch" aria-hidden="true"></span>
               </label>
 
+              <label class="toggle-row" for="strictMarkdown">
+                <span>
+                  <span class="toggle-title">{t.strictMarkdown()}</span>
+                  <span class="toggle-desc">{t.strictMarkdownDescription()}</span>
+                </span>
+                <input
+                  id="strictMarkdown"
+                  type="checkbox"
+                  checked={draftSettings.strictMarkdown}
+                  on:change={(event) => toggleSetting('strictMarkdown', event)}
+                />
+                <span class="toggle-switch" aria-hidden="true"></span>
+              </label>
+
               <label class="toggle-row" for="copyMarkdownSyntaxEnabled">
                 <span>
                   <span class="toggle-title">{t.copyMarkdownSyntax()}</span>

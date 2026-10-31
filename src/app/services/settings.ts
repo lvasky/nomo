@@ -117,6 +117,7 @@ export interface AppPreferences {
   codeBlockLineNumbersVisible: boolean;
   codeBlockIndent: CodeBlockIndentPreference;
   inlineCodeRenderingEnabled: boolean;
+  strictMarkdown: boolean;
   copyMarkdownSyntaxEnabled: boolean;
   quickInsertEnabled: boolean;
   quickInsertTrigger: string;
@@ -202,6 +203,7 @@ export const DEFAULT_APP_PREFERENCES: AppPreferences = {
   codeBlockLineNumbersVisible: true,
   codeBlockIndent: 'spaces-2',
   inlineCodeRenderingEnabled: true,
+  strictMarkdown: true,
   copyMarkdownSyntaxEnabled: true,
   quickInsertEnabled: true,
   quickInsertTrigger: DEFAULT_QUICK_INSERT_TRIGGER,
@@ -329,6 +331,7 @@ export async function loadAppPreferences(
     codeBlockLineNumbersVisible: parseSetting<unknown>(settings, 'codeBlockLineNumbersVisible'),
     codeBlockIndent: parseSetting<unknown>(settings, 'codeBlockIndent'),
     inlineCodeRenderingEnabled: parseSetting<unknown>(settings, 'inlineCodeRenderingEnabled'),
+    strictMarkdown: parseSetting<unknown>(settings, 'strictMarkdown'),
     copyMarkdownSyntaxEnabled: parseSetting<unknown>(settings, 'copyMarkdownSyntaxEnabled'),
     quickInsertEnabled: parseSetting<unknown>(settings, 'quickInsertEnabled'),
     quickInsertTrigger: parseSetting<unknown>(settings, 'quickInsertTrigger'),
@@ -510,6 +513,7 @@ export function normalizeAppPreferences(
       typeof value.inlineCodeRenderingEnabled === 'boolean'
         ? value.inlineCodeRenderingEnabled
         : DEFAULT_APP_PREFERENCES.inlineCodeRenderingEnabled,
+    strictMarkdown: typeof value.strictMarkdown === 'boolean' ? value.strictMarkdown : true,
     copyMarkdownSyntaxEnabled:
       typeof value.copyMarkdownSyntaxEnabled === 'boolean'
         ? value.copyMarkdownSyntaxEnabled
@@ -683,6 +687,7 @@ function toPersistedPreferenceEntries(
     codeBlockLineNumbersVisible: preferences.codeBlockLineNumbersVisible,
     codeBlockIndent: preferences.codeBlockIndent,
     inlineCodeRenderingEnabled: preferences.inlineCodeRenderingEnabled,
+    strictMarkdown: preferences.strictMarkdown,
     copyMarkdownSyntaxEnabled: preferences.copyMarkdownSyntaxEnabled,
     quickInsertEnabled: preferences.quickInsertEnabled,
     quickInsertTrigger: preferences.quickInsertTrigger,

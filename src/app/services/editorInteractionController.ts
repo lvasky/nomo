@@ -1,3 +1,4 @@
+import { requiresHtmlCommand } from '../../lib/editor-core/strictMarkdown';
 import { tick } from 'svelte';
 import type { EditorCommand, EditorCore, EditorMode } from '../../lib/editor-core';
 import type { OutlineItem } from '../../lib/outline/outlineService';
@@ -15,6 +16,7 @@ import {
 
 interface EditorInteractionOptions {
   getEditor(): EditorCore;
+  getStrictMarkdown?(): boolean;
   getLargeDocumentMode(): boolean;
   getMode(): EditorMode;
   getSplitView?(): boolean;
@@ -129,6 +131,10 @@ export function createEditorInteractionController(options: EditorInteractionOpti
   }
 
   function runCommand(command: EditorCommand) {
+    if ((options.getStrictMarkdown?.() ?? true) && requiresHtmlCommand(command)) {
+      options.setStatusMessage(t.strictMarkdownDescription());
+      return;
+    }
     if (options.getMode() === 'source' && command.type === 'insertDetails') {
       const source = options.getSourceEditor();
       const selection = source?.getSelection();

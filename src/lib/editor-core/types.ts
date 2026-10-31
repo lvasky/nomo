@@ -22,6 +22,7 @@ export interface EditorRuntimeOptions {
   readonly: boolean;
   mode: EditorMode;
   inlineCodeRenderingEnabled?: boolean;
+  strictMarkdown?: boolean;
   copyMarkdownSyntaxEnabled: boolean;
   quickInsertEnabled?: boolean;
   quickInsertTrigger?: string;
@@ -223,6 +224,7 @@ export interface EditorCoreOptions {
   readonly?: boolean;
   mode?: EditorMode;
   inlineCodeRenderingEnabled?: boolean;
+  strictMarkdown?: boolean;
   copyMarkdownSyntaxEnabled?: boolean;
   quickInsertEnabled?: boolean;
   quickInsertTrigger?: string;

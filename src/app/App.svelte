@@ -395,6 +395,7 @@
   let codeBlockLineNumbersVisible = DEFAULT_APP_PREFERENCES.codeBlockLineNumbersVisible;
   let codeBlockIndent: CodeBlockIndentPreference = DEFAULT_APP_PREFERENCES.codeBlockIndent;
   let inlineCodeRenderingEnabled = DEFAULT_APP_PREFERENCES.inlineCodeRenderingEnabled;
+  let strictMarkdown = DEFAULT_APP_PREFERENCES.strictMarkdown;
   let copyMarkdownSyntaxEnabled = DEFAULT_APP_PREFERENCES.copyMarkdownSyntaxEnabled;
   let quickInsertEnabled = DEFAULT_APP_PREFERENCES.quickInsertEnabled;
   let quickInsertTrigger = DEFAULT_APP_PREFERENCES.quickInsertTrigger;
@@ -3784,6 +3785,7 @@
     markdown,
     mode: getCoreModeForView(mode),
     inlineCodeRenderingEnabled,
+    strictMarkdown,
     copyMarkdownSyntaxEnabled,
     quickInsertEnabled,
     quickInsertTrigger,
@@ -3832,7 +3834,7 @@
     const initialMode = tab.largeDocumentMode ? 'source' : owner?.kind === 'comparison' ? owner.mode : preferredEditorMode;
     const core = createEditorCore({
       markdown: tab.markdown, mode: getCoreModeForView(initialMode),
-      inlineCodeRenderingEnabled, copyMarkdownSyntaxEnabled, theme: currentEditorTheme,
+      inlineCodeRenderingEnabled, strictMarkdown, copyMarkdownSyntaxEnabled, theme: currentEditorTheme,
       quickInsertEnabled, quickInsertTrigger,
       onSelectionSnapshotChange: (event) => { if (activeTabId === tab.id) handleSemanticSelectionChange(event); },
       onLinkShortcut: () => { void switchTab(tab.id).then(openLinkPicker); },
@@ -3853,6 +3855,7 @@
     runtime.readingAnchor = readingPosition?.anchor;
     runtime.readingAnchorMode = readingPosition?.anchorMode;
     runtime.interaction = createEditorInteractionController({
+      getStrictMarkdown: () => strictMarkdown,
       getEditor: () => core, getLargeDocumentMode: () => currentDocument()?.largeDocumentMode ?? tab.largeDocumentMode,
       getMode: () => runtime.mode === 'source' ? 'source' : runtime.mode === 'split' ? splitActivePane : 'semantic',
       getSplitView: () => runtime.mode === 'split', getOutline: () => runtime.outline,
@@ -3864,6 +3867,7 @@
       getSourceLineHeight: () => runtime.sourceEditor?.getLineHeight() ?? 24,
     });
     runtime.images = createImageInsertionHandlers({
+      getStrictMarkdown: () => strictMarkdown,
       getEditor: () => core, getMode: () => runtime.mode === 'source' ? 'source' : 'semantic',
       getFileName: () => currentDocument()?.fileName ?? tab.fileName, getNativePath: () => currentDocument()?.nativePath ?? null,
       getSourceEditor: () => runtime.sourceEditor, getImageContext: () => getImageContext(tab.id),
@@ -5177,6 +5181,7 @@
     },
   });
   const editorInteraction = createEditorInteractionController({
+    getStrictMarkdown: () => strictMarkdown,
     getEditor: () => editor,
     getLargeDocumentMode: () => largeDocumentMode,
     getMode: () => getActiveEditorMode(),
@@ -5199,6 +5204,7 @@
     getSourceLineHeight,
   });
   const imageInsertion = createImageInsertionHandlers({
+    getStrictMarkdown: () => strictMarkdown,
     getEditor: () => editor,
     getMode: () => getActiveEditorMode(),
     getFileName: () => fileName,
@@ -6368,6 +6374,7 @@
     codeBlockLineNumbersVisible = preferences.codeBlockLineNumbersVisible;
     codeBlockIndent = preferences.codeBlockIndent;
     inlineCodeRenderingEnabled = preferences.inlineCodeRenderingEnabled;
+    strictMarkdown = preferences.strictMarkdown;
     copyMarkdownSyntaxEnabled = preferences.copyMarkdownSyntaxEnabled;
     quickInsertEnabled = preferences.quickInsertEnabled;
     quickInsertTrigger = preferences.quickInsertTrigger;
@@ -6406,9 +6413,9 @@
       if (runtime.disposed || !isMarkdownTab(tab)) continue;
       const owner = findWorkspaceItemForTab(workspaceItems, tab.id);
       runtime.mode = owner?.kind === 'comparison' ? owner.mode : tab.largeDocumentMode ? 'source' : options.applyEditorMode ? preferredEditorMode : runtime.mode;
-      runtime.editor.updateOptions({ inlineCodeRenderingEnabled, copyMarkdownSyntaxEnabled, quickInsertEnabled, quickInsertTrigger, mode: getCoreModeForView(runtime.mode), readonly: tab.readonlyDocumentMode });
+      runtime.editor.updateOptions({ inlineCodeRenderingEnabled, strictMarkdown, copyMarkdownSyntaxEnabled, quickInsertEnabled, quickInsertTrigger, mode: getCoreModeForView(runtime.mode), readonly: tab.readonlyDocumentMode });
     }
-    editor.updateOptions({ inlineCodeRenderingEnabled, copyMarkdownSyntaxEnabled, quickInsertEnabled, quickInsertTrigger });
+    editor.updateOptions({ inlineCodeRenderingEnabled, strictMarkdown, copyMarkdownSyntaxEnabled, quickInsertEnabled, quickInsertTrigger });
     applyOutlineDefaultExpansion();
 
     const activeDocument = tabs.find((tab) => tab.id === activeTabId);
@@ -6469,6 +6476,7 @@
       codeBlockLineNumbersVisible,
       codeBlockIndent,
       inlineCodeRenderingEnabled,
+      strictMarkdown,
       copyMarkdownSyntaxEnabled,
       shortcutPreferences,
       imageHandlingSettings: imageSettings,

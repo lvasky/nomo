@@ -3,7 +3,7 @@ import type { EditorView } from 'prosemirror-view';
 import { closeHistory } from 'prosemirror-history';
 import { onInterfaceLocaleChanged, t } from '../../../app/i18n';
 import { insertQuickInsertContent } from '../editorCommands';
-import type { EditorQuickInsertPickerEvent } from '../types';
+import type { EditorCommand, EditorQuickInsertPickerEvent } from '../types';
 import { isQuickInsertTrigger, QUICK_INSERT_CATEGORIES } from '../quickInsert';
 import { analyzeInlineSource } from '../InlineSourceCodec';
 import { getEmptyInlineTemplateFormats } from './inlineSourceEditing';
@@ -20,6 +20,7 @@ interface QuickInsertSession {
 interface QuickInsertOptions {
   enabled: boolean;
   trigger: string;
+  canInsert?: (command: EditorCommand) => boolean;
   onChoose?: (event: EditorQuickInsertPickerEvent) => boolean;
 }
 
@@ -84,7 +85,7 @@ function insertSelected(view: EditorView, getOptions: () => QuickInsertOptions):
           .setMeta('addToHistory', false),
       );
   } else {
-    inserted = insertQuickInsertContent(view, session.from, session.to, command);
+    inserted = getOptions().canInsert?.(command) !== false && insertQuickInsertContent(view, session.from, session.to, command);
     if (inserted && command.type === 'insertMathInline') dismissQuickInsert(view);
   }
   if (!inserted) changeMenu(view, { type: 'unavailable' });

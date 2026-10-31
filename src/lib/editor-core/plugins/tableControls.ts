@@ -19,6 +19,7 @@ import { TABLE_LAYOUT_EVENT } from '../../table-layout/dom';
 const tableControlsKey = new PluginKey('tableControls');
 
 type TableControlsOptions = {
+  strictMarkdown?: () => boolean;
   showOuterBorderInsertButtons?: boolean;
 };
 
@@ -473,7 +474,7 @@ class TableControlsView {
         () => this.runAndClosePicker(setTableColumnAlignment('right')),
       ),
     );
-    bar.appendChild(
+    if (!this.options.strictMarkdown?.()) bar.appendChild(
       this.createUtilityButton(
         t.toggleHeaderRow(),
         'util-header-row',

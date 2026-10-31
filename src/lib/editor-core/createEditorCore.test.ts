@@ -591,7 +591,7 @@ describe('createEditorCore', () => {
 
   it('emits pending highlight snapshots for toolbar state', () => {
     const target = document.createElement('div');
-    const editor = createEditorCore({ markdown: '', target });
+    const editor = createEditorCore({ markdown: '', target, strictMarkdown: false });
     const events: boolean[] = [];
 
     editor.subscribe((event) => {

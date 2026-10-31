@@ -1,4 +1,6 @@
 {
+  "strictMarkdown": "厳格な Markdown",
+  "strictMarkdownDescription": "GitHub、GitLab、VS Code と互換性のある Markdown を使用し、貼り付けや編集で HTML を自動生成しません。既存および手入力の HTML を保持し、表内の改行には <br> を使います。",
   "typographyEnabled": "精密な組版",
   "typographyDescription": "Knuth–Plass（KP）アルゴリズムで段落の改行位置を最適化します。",
   "typographySettings": "段落の組版",

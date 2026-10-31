@@ -1,3 +1,5 @@
+import { requiresHtmlCommand, strictMarkdownPaste } from './strictMarkdown';
+import { tableSourcePlugin } from './tableSource';
 import { serializeClipboardText } from './markdownSerialization';
 import { typographyPlugin, isTypographyTransaction } from './plugins/typography';
 import { typographyBreaksPlugin } from './nodeViews/TypographyBreakNodeView';
@@ -228,6 +230,7 @@ export class ProseMirrorEditorCore implements EditorCore {
     this.runtime = {
       readonly: options.readonly ?? false,
       mode: options.mode ?? 'semantic',
+      strictMarkdown: options.strictMarkdown ?? true,
       copyMarkdownSyntaxEnabled: options.copyMarkdownSyntaxEnabled ?? true,
       quickInsertEnabled: options.quickInsertEnabled ?? true,
       quickInsertTrigger: isQuickInsertTrigger(options.quickInsertTrigger)
@@ -254,7 +257,7 @@ export class ProseMirrorEditorCore implements EditorCore {
       clipboardTextParser: (text, $context) => createPlainTextSlice(text, $context),
       transformPastedHTML: preserveUnsupportedDetailsHtml,
       transformPasted: (slice, view) => this.transformInlineSourceSlice(
-        slice,
+        this.runtime.strictMarkdown ? strictMarkdownPaste(slice, findTableContext(view.state)?.rowIndex ?? 0) : slice,
         view.state.selection.$from.parent.type === schema.nodes.html_block &&
           view.state.selection.$from.sameParent(view.state.selection.$to)
           ? projectInlineSource
@@ -305,7 +308,7 @@ export class ProseMirrorEditorCore implements EditorCore {
         code_block: (node, view, getPos) =>
           new CodeBlockNodeView(node, view, getPos as () => number, this.isRestoringNodeSelection(getPos)),
         image: (node, view) =>
-          new ImageNodeView(node, view, () => this.options.getImageContext?.() ?? {}),
+          new ImageNodeView(node, view, () => this.options.getImageContext?.() ?? {}, () => this.runtime.strictMarkdown ?? true),
         html_block: (node, view, getPos) =>
           new HtmlBlockNodeView(node, view, getPos as () => number),
         comment_block: (node, view, getPos) =>
@@ -927,7 +930,7 @@ export class ProseMirrorEditorCore implements EditorCore {
       const { doc, selection } = this.view.state;
       const clipboardDoc = removeEmptyTrailingParagraph(doc);
       const selectionTo = Math.min(selection.to, clipboardDoc.content.size);
-      return serializeMarkdownSelection(clipboardDoc, selection.from, selectionTo) ??
+      return serializeMarkdownSelection(clipboardDoc, selection.from, selectionTo, { strictMarkdown: this.runtime.strictMarkdown }) ??
         serializeClipboardText(selection.content(), true);
     } catch {
       return plainText;
@@ -1409,6 +1412,7 @@ export class ProseMirrorEditorCore implements EditorCore {
   execute(command: EditorCommand): boolean {
     this.assertActive();
     this.flushPendingMarkdownSync();
+    if (this.runtime.strictMarkdown && command.type === 'insertImage') command = { ...command, width: null, align: null };
 
     if (!this.canExecute(command)) {
       return false;
@@ -1442,6 +1446,7 @@ export class ProseMirrorEditorCore implements EditorCore {
   }
 
   canExecute(command: EditorCommand): boolean {
+    if (this.runtime.strictMarkdown && requiresHtmlCommand(command)) return false;
     if (this.destroyed || this.runtime.readonly) {
       return false;
     }
@@ -1506,6 +1511,7 @@ export class ProseMirrorEditorCore implements EditorCore {
       if (this.view) commitActiveEdit(this.view, true);
       this.commitPendingEdits();
     }
+    if (options.strictMarkdown !== undefined && options.strictMarkdown !== this.runtime.strictMarkdown) this.flushPendingMarkdownSync();
     this.runtime = {
       ...this.runtime,
       ...options,
@@ -1584,6 +1590,7 @@ export class ProseMirrorEditorCore implements EditorCore {
           enabled: this.isEditable() && (this.runtime.quickInsertEnabled ?? true),
           trigger: this.runtime.quickInsertTrigger ?? DEFAULT_QUICK_INSERT_TRIGGER,
           onChoose: this.options.onQuickInsertPicker,
+          canInsert: (command) => this.canExecute(command),
         })),
         blockAlignmentPlugin(),
         inputRules({
@@ -1607,7 +1614,8 @@ export class ProseMirrorEditorCore implements EditorCore {
         trailingParagraphPlugin(),
         tocSyncPlugin(),
         tableHtmlBlockPlugin(),
-        tableControlsPlugin(),
+        tableSourcePlugin(),
+        tableControlsPlugin({ strictMarkdown: () => this.runtime.strictMarkdown ?? true }),
         tableLayoutPlugin(),
         tableEditing({ allowTableNodeSelection: true }),
         createCalloutPlugin(),
@@ -1624,7 +1632,7 @@ export class ProseMirrorEditorCore implements EditorCore {
             return Boolean(this.options.onLinkShortcut);
           },
           'Alt-Shift-5': toggleInlineSourceFormat('strikethrough'),
-          'Mod-u': toggleInlineSourceFormat('underline'),
+          'Mod-u': () => this.runtime.strictMarkdown ? true : this.runProseMirrorCommand({ type: 'toggleUnderline' }),
           'Mod-\\': (_state, _dispatch, _view) =>
             this.runProseMirrorCommand({ type: 'clearInlineStyles' }),
           'Ctrl-\\': (_state, _dispatch, _view) =>
@@ -1901,7 +1909,7 @@ export class ProseMirrorEditorCore implements EditorCore {
     const clipboardDoc = removeEmptyTrailingParagraph(doc);
     const selectionTo = Math.min(selection.to, clipboardDoc.content.size);
     const selectedMarkdown =
-      serializeMarkdownSelection(clipboardDoc, selection.from, selectionTo) ??
+      serializeMarkdownSelection(clipboardDoc, selection.from, selectionTo, { strictMarkdown: this.runtime.strictMarkdown }) ??
       serializeClipboardText(selection.content(), true);
 
     return {
@@ -1957,11 +1965,15 @@ export class ProseMirrorEditorCore implements EditorCore {
 
     this.clearPendingMarkdownSync();
 
-    const serializedMarkdown = pendingDoc.eq(this.originalDoc)
+    let serializedMarkdown = pendingDoc.eq(this.originalDoc)
       ? this.originalMarkdown
       : pendingDoc.content.eq(this.originalDoc.content)
         ? `${String(pendingDoc.attrs.frontMatterPrefix ?? '')}${splitFrontMatter(this.originalMarkdown).body}`
-        : serializeMarkdown(removeEmptyTrailingParagraph(pendingDoc));
+        : serializeMarkdown(removeEmptyTrailingParagraph(pendingDoc), { strictMarkdown: this.runtime.strictMarkdown });
+    // Keep the file's existing newline convention, including its final newline.
+    const newline = this.originalMarkdown.includes('\r\n') ? '\r\n' : '\n';
+    serializedMarkdown = serializedMarkdown.replace(/\r?\n/g, newline);
+    if (serializedMarkdown && this.originalMarkdown.endsWith('\n') && !serializedMarkdown.endsWith('\n')) serializedMarkdown += newline;
     // 保留 Markdown 字符串层的 TOC 规范化，但不再因此重建 EditorState。
     // 语义视图中的 toc_block 已由 tocSyncPlugin 原位同步，历史栈保持不变。
     this.markdown = updateTocBlocks(serializedMarkdown);
@@ -2052,7 +2064,7 @@ export class ProseMirrorEditorCore implements EditorCore {
     const deletedSrcs = findFullyRemovedImageSrcs(previousDoc, nextDoc);
     if (deletedSrcs.length === 0) return;
     // 当前语义事务尚未同步 this.markdown；用 nextDoc 校验真实删除候选。
-    const nextMarkdown = serializeMarkdown(removeEmptyTrailingParagraph(nextDoc));
+    const nextMarkdown = serializeMarkdown(removeEmptyTrailingParagraph(nextDoc), { strictMarkdown: this.runtime.strictMarkdown });
     this.notifyDeletedImageSrcs(filterFullyRemovedImageSrcs(deletedSrcs, nextMarkdown));
   }
 
