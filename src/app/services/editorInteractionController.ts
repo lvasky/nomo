@@ -3,7 +3,7 @@ import { tick } from 'svelte';
 import type { EditorCommand, EditorCore, EditorMode } from '../../lib/editor-core';
 import type { OutlineItem } from '../../lib/outline/outlineService';
 import type { MarkdownSourceEditorHandle } from '../components/markdownSourceEditor';
-import { createTocBlock } from '../../lib/toc/tocService';
+import { TOC_PLACEHOLDER_MARKER } from '../../lib/toc/tocMarkers';
 import { t } from '../i18n';
 import {
   type OutlineScrollAnchor,
@@ -177,7 +177,7 @@ export function createEditorInteractionController(options: EditorInteractionOpti
     const selection = sourceEditor?.getSelection();
     const start = selection?.from ?? markdown.length;
     const end = selection?.to ?? start;
-    const tocBlock = createTocBlock(markdown);
+    const tocBlock = TOC_PLACEHOLDER_MARKER;
     const prefix = markdown.slice(0, start);
     const suffix = markdown.slice(end);
     const before = prefix.endsWith('\n') || prefix.length === 0 ? '' : '\n\n';

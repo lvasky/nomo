@@ -82,12 +82,16 @@
 
 .toc-link {
   --toc-row-bg: transparent;
+  --toc-level-indent: calc(var(--toc-indent, 0px) * var(--toc-indent-scale, 1));
   display: grid;
   grid-template-columns: 16px minmax(0, max-content) minmax(24px, 1fr) auto;
   align-items: center;
-  width: 100%;
+  /* Shift the entire row so heading depth is visible independently of button padding. */
+  margin-inline-start: var(--toc-level-indent);
+  width: calc(100% - var(--toc-level-indent));
+  min-width: 0;
   min-height: 30px;
-  padding: 2px 12px 2px calc(var(--toc-indent, 0px) + 8px);
+  padding: 2px 12px 2px 8px;
   border: 0;
   border-radius: var(--md-editor-radius-sm);
   background: var(--toc-row-bg);
@@ -109,7 +113,6 @@
 
 .toc-link[data-level='1'] {
   grid-template-columns: minmax(0, max-content) minmax(24px, 1fr) auto;
-  padding-left: 8px;
   font-weight: 600;
 }
 
@@ -163,8 +166,9 @@
   }
 
   .toc-link {
+    --toc-indent-scale: 0.62;
     grid-template-columns: 14px minmax(0, 1fr);
-    padding-left: calc(var(--toc-indent, 0px) * 0.62 + 6px);
+    padding-left: 6px;
   }
 
   .toc-link[data-level='1'] {

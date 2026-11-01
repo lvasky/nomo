@@ -97,7 +97,7 @@ import { insertCallout, toggleCalloutType, unwrapCallout } from './callout/callo
 import { insertDetails, setDetailsDefaultOpen, unwrapDetails } from './details/detailsCommands';
 import { detailsHistoryBoundary, detailsKey } from './details/detailsState';
 import type { EditorCommand, SetMarkdownOptions } from './types';
-import { createTocList } from '../toc/tocService';
+import { TOC_PLACEHOLDER_MARKER } from '../toc/tocMarkers';
 import { ensureFrontMatter } from '../markdown/frontMatter';
 import { planOutlineSectionMove, reorderOutlineSection } from '../outline/outlineReorder';
 import { extractOutline } from '../outline/outlineService';
@@ -994,7 +994,7 @@ export function executeEditorCommand(
     case 'insertDiagramBlock':
       return insertMermaidBlock(view, getDiagramTemplate(command.diagramType).code);
     case 'insertToc':
-      return insertTocBlock(view, markdown);
+      return insertTocBlock(view);
     case 'insertFrontMatter':
       return insertFrontMatterBlock(markdown, setMarkdown);
     case 'insertTable': {
@@ -1145,8 +1145,8 @@ function insertFrontMatterBlock(markdown: string, setMarkdown: MarkdownSetter): 
   return true;
 }
 
-function insertTocBlock(view: EditorView, markdown: string): boolean {
-  const node = schema.nodes.toc_block.create({ content: createTocList(markdown) });
+function insertTocBlock(view: EditorView): boolean {
+  const node = schema.nodes.toc_block.create({ sourceMarker: TOC_PLACEHOLDER_MARKER });
   const { state } = view;
   const { $from, empty } = state.selection;
 

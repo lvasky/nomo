@@ -795,7 +795,7 @@
                 >
                 <button
                   on:click={() => finish(() => runCommand({ type: 'insertToc' }), 'paragraph')}
-                  >{t.toc()}</button
+                  >{t.insertToc()}</button
                 >
                 <button on:click={() => finish(editFrontMatter, 'paragraph')}
                   >{t.frontMatter()}</button

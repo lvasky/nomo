@@ -72,7 +72,7 @@
 | Callout NodeView | `src/lib/editor-core/nodeViews/CalloutNodeView.ts` | `src/lib/editor-core/callout/` | 提示块展示/编辑变更 |
 | 折叠块 NodeView | `src/lib/editor-core/nodeViews/DetailsNodeView.ts` | `details/detailsState.ts`, `details/detailsCommands.ts`, `src/app/styles/editor-document.css`, `src/lib/typography/exportPrint.ts`, `exportRuntime.ts` | 修改箭头/块菜单、组字结束后收起与光标恢复、共享正文 DOM 显隐、原生 HTML 展开重排及打印前递归展开 |
 | HTML 块 NodeView | `src/lib/editor-core/nodeViews/HtmlBlockNodeView.ts` | `src/lib/editor-core/html/` | 可编辑 HTML 块行为变更 |
-| TOC 块 NodeView | `src/lib/editor-core/nodeViews/TocBlockNodeView.ts` | `src/lib/toc/tocService.ts`, `plugins/tocSync.ts`, `markdownTokenizer.ts`, `markdownSerialization.ts` | 文档内目录展示；独占一行的 `[TOC]` 为只派生显示的动态目录，保存保留原标记；代码中的标记不转换 |
+| TOC 块 NodeView | `src/lib/editor-core/nodeViews/TocBlockNodeView.ts` | `src/lib/toc/tocService.ts`, `plugins/tocSync.ts`, `markdownTokenizer.ts`, `markdownSerialization.ts` | 文档内目录展示；独占一行的 `[TOC]` 为只派生显示的动态目录，保存保留原标记；目录行按 H1–H6 整行缩进；顶部插入命令在语义和源码模式统一插入 `[TOC]`；代码中的标记不转换 |
 | 注释块/行内注释 NodeView | `src/lib/editor-core/nodeViews/CommentBlockNodeView.ts`, `CommentInlineNodeView.ts` | `src/lib/editor-core/nodeViews/activeEditRegistry.ts` | 注释卡片展示/编辑/编辑态协调 |
 | 脚注 NodeView | `src/lib/editor-core/nodeViews/FootnoteDefNodeView.ts`, `FootnoteRefNodeView.ts` | — | 脚注定义/引用展示、跳转、预览 |
 | 分割线 NodeView | `src/lib/editor-core/nodeViews/HorizontalRuleNodeView.ts` | — | 水平分割线渲染/选中 |

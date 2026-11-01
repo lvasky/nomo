@@ -434,7 +434,7 @@ export const JA_JP_EXTRA_TRANSLATIONS = {
   diagramEr: 'ER図',
   footnote: '脚注',
   insertFootnote: '脚注を挿入',
-  insertToc: '目次を挿入',
+  insertToc: '[TOC] を挿入',
   mode: '編集モード',
   showOutline: '文書のアウトラインを表示',
   hideOutline: '文書のアウトラインを非表示にする',
