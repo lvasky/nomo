@@ -540,8 +540,9 @@ class TableControlsView {
       { title: t.moveTableColumnRight(), label: '→', axis: 'column', direction: 1, enabled: !!context && context.columnIndex < colCount - 1 },
     ] as const;
     for (const move of moves) {
-      const button = this.createButton(`${move.title} (Alt+${move.label})`, move.label,
-        `util-btn util-move-${move.axis}-${move.direction === -1 ? 'before' : 'after'}`,
+      const button = this.createUtilityButton(`${move.title} (Alt+${move.label})`,
+        `util-move-${move.axis}-${move.direction === -1 ? 'before' : 'after'}`,
+        this.createMoveIcon(move.axis, move.direction),
         () => this.runAndClosePicker(move.axis === 'row'
           ? moveCurrentTableRow(move.direction) : moveCurrentTableColumn(move.direction)));
       button.disabled = !this.moveEnabled || !move.enabled;
@@ -603,6 +604,16 @@ class TableControlsView {
     const icon = this.el('span', 'util-icon util-icon-resize');
     icon.appendChild(this.el('span', 'util-icon-resize-grid'));
     icon.appendChild(this.el('span', 'util-icon-resize-corner'));
+    return icon;
+  }
+
+  private createMoveIcon(axis: 'row' | 'column', direction: -1 | 1): HTMLElement {
+    const icon = this.el('span', 'util-icon util-icon-move');
+    icon.setAttribute('aria-hidden', 'true');
+    const path = axis === 'row'
+      ? direction === -1 ? 'm5 12 7-7 7 7M12 19V5' : 'M12 5v14m7-7-7 7-7-7'
+      : direction === -1 ? 'm12 19-7-7 7-7M19 12H5' : 'M5 12h14m-7-7 7 7-7 7';
+    icon.innerHTML = `<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="${path}"/></svg>`;
     return icon;
   }
 
