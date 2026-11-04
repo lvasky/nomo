@@ -75,11 +75,7 @@ pub(crate) fn resolve_image_asset(input: ImageResolveInput) -> ImageResolvePaylo
     } else if let Some(document_path) = input.document_path {
         let parent = Path::new(&document_path).parent().map(Path::to_path_buf);
         if let Some(parent) = parent {
-            parent.join(
-                local_src
-                    .trim_start_matches("./")
-                    .replace('/', std::path::MAIN_SEPARATOR_STR),
-            )
+            parent.join(local_src.replace('/', std::path::MAIN_SEPARATOR_STR))
         } else {
             PathBuf::from(&local_src)
         }
@@ -87,6 +83,10 @@ pub(crate) fn resolve_image_asset(input: ImageResolveInput) -> ImageResolvePaylo
         PathBuf::from(&local_src)
     };
 
+    // File-system lookup accepts `..`, but Tauri's asset protocol deliberately
+    // rejects ParentDir components. Resolve against the Markdown file first and
+    // send only the canonical path to the WebView, keeping `src` unchanged.
+    let absolute_path = absolute_path.canonicalize().unwrap_or(absolute_path);
     let exists = absolute_path.is_file();
     ImageResolvePayload {
         src,

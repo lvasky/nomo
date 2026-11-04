@@ -140,7 +140,7 @@
 | 资源管理器展示 | `src/app/services/explorerRows.ts` | — | 树形拍平为可渲染行 |
 | 资源管理器重命名规则 | `src/app/services/explorerRename.ts` | — | 行内重命名输入框选区范围 |
 | Rust 文件系统 | `src-tauri/src/file_system.rs` | `src-tauri/src/models.rs` | 后端文件读写、Markdown 编码转换/保持、短句柄目录快照与按需枚举 |
-| 图片资源后端 | `src-tauri/src/file_system/image_assets.rs` | — | 图片导入/解析/PicGo 上传/删除 |
+| 图片资源后端 | `src-tauri/src/file_system/image_assets.rs` | — | 图片导入/解析/PicGo 上传/删除；相对当前 Markdown 文档解析并规范化图片绝对路径，支持 `../`，避免 asset 协议拒绝 ParentDir；不改写源路径 |
 
 ### 大文件 TXT/JSON 分段编辑
 
