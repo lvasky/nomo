@@ -15,6 +15,7 @@ import {
   TableMap,
 } from 'prosemirror-tables';
 import { schema, type TableColumnAlignment } from './schema';
+import { closeHistory } from 'prosemirror-history';
 
 interface TableContext {
   table: ProseMirrorNode;
@@ -155,6 +156,90 @@ export function deleteTableColumnAt(column: number): Command {
 
 export function deleteCurrentTable(): Command {
   return deleteTable;
+}
+
+/** Reordering merged cells could split their contents; leave such tables untouched. */
+export function canMoveTable(table: ProseMirrorNode): boolean {
+  const columns = table.firstChild?.childCount ?? 0;
+  if (!columns) return false;
+  for (let row = 0; row < table.childCount; row++) {
+    const cells = table.child(row);
+    if (cells.childCount !== columns) return false;
+    for (let column = 0; column < columns; column++) {
+      const cell = cells.child(column);
+      if (cell.attrs.colspan !== 1 || cell.attrs.rowspan !== 1) return false;
+    }
+  }
+  return true;
+}
+
+export function moveCurrentTableRow(direction: -1 | 1): Command {
+  return moveCurrentTableAxis('row', direction);
+}
+
+export function moveCurrentTableColumn(direction: -1 | 1): Command {
+  return moveCurrentTableAxis('column', direction);
+}
+
+function moveCurrentTableAxis(axis: 'row' | 'column', direction: -1 | 1): Command {
+  return (state, dispatch) => {
+    const context = findTableContext(state);
+    if (!context || !canMoveTable(context.table)) return false;
+    const { table, tableStart, rowIndex, columnIndex, map } = context;
+    const index = axis === 'row' ? rowIndex : columnIndex;
+    const target = index + direction;
+    const count = axis === 'row' ? map.height : map.width;
+    if (target < 0 || target >= count) return false;
+    if (!dispatch) return true;
+
+    const swap = (value: number) => value === index ? target : value === target ? index : value;
+    const hasHeader = hasFirstTableRowHeader(table);
+    const rows: ProseMirrorNode[] = [];
+    for (let rowIndex = 0; rowIndex < map.height; rowIndex++) {
+      const sourceRow = table.child(axis === 'row' ? swap(rowIndex) : rowIndex);
+      const cells: ProseMirrorNode[] = [];
+      for (let column = 0; column < map.width; column++) {
+        const cell = sourceRow.child(axis === 'column' ? swap(column) : column);
+        // The header belongs to the first row position, alignment to the logical column.
+        const type = hasHeader
+          ? rowIndex === 0 ? schema.nodes.table_header : schema.nodes.table_cell
+          : cell.type;
+        const attrs = axis === 'row'
+          ? { ...cell.attrs, align: table.firstChild!.child(column).attrs.align }
+          : cell.attrs;
+        cells.push(type === cell.type && attrs.align === cell.attrs.align
+          ? cell : type.create(attrs, cell.content, cell.marks));
+      }
+      rows.push(cells.every((cell, index) => cell === sourceRow.child(index))
+        ? sourceRow : sourceRow.type.create(sourceRow.attrs, cells, sourceRow.marks));
+    }
+    const next = table.type.create(table.attrs, rows, table.marks);
+    const tr = closeHistory(state.tr).replaceWith(tableStart - 1, tableStart - 1 + table.nodeSize, next);
+    const nextRow = axis === 'row' ? target : rowIndex;
+    const nextColumn = axis === 'column' ? target : columnIndex;
+    // Follow the moved cell, retaining a text selection or a cell selection.
+    const relocate = (pos: number) => {
+      const cell = map.findCell(pos - tableStart);
+      return tableStart + TableMap.get(next).positionAt(
+        axis === 'row' ? swap(cell.top) : cell.top,
+        axis === 'column' ? swap(cell.left) : cell.left,
+        next,
+      );
+    };
+    if (state.selection instanceof CellSelection) {
+      tr.setSelection(CellSelection.create(tr.doc,
+        relocate(state.selection.$anchorCell.pos), relocate(state.selection.$headCell.pos)));
+    } else if (state.selection instanceof TextSelection &&
+      state.selection.$anchor.sameParent(state.selection.$head)) {
+      const cellPos = tableStart + map.positionAt(rowIndex, columnIndex, table);
+      const offset = relocate(cellPos) - cellPos;
+      tr.setSelection(TextSelection.create(tr.doc, state.selection.anchor + offset, state.selection.head + offset));
+    } else {
+      moveSelectionToResizedTable(tr, tableStart, next, nextRow, nextColumn);
+    }
+    dispatch(tr.scrollIntoView());
+    return true;
+  };
 }
 
 export function resizeCurrentTable(rows: number, columns: number): Command {

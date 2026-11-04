@@ -27,7 +27,7 @@ import { dismissQuickInsert, quickInsertPlugin } from './plugins/quickInsert';
 import { emojiSuggestionsPlugin } from './plugins/emojiSuggestions';
 import { DEFAULT_QUICK_INSERT_TRIGGER, isQuickInsertTrigger } from './quickInsert';
 import { keymap } from 'prosemirror-keymap';
-import { EditorState, Selection, NodeSelection, TextSelection, type Transaction } from 'prosemirror-state';
+import { EditorState, Selection, NodeSelection, TextSelection, type Command, type Transaction } from 'prosemirror-state';
 import { Slice, Fragment, DOMSerializer, DOMParser, type Node as ProseMirrorNode, type ResolvedPos } from 'prosemirror-model';
 import { EditorView } from 'prosemirror-view';
 import { liftListItem, splitListItem } from 'prosemirror-schema-list';
@@ -137,7 +137,7 @@ import {
   type ClipboardMarkdownClassification,
 } from './clipboardMarkdown';
 import { schema } from './schema';
-import { addTableRowAfter, addTableRowBefore, findTableContext, normalizePastedMarkdownTable } from './tableCommands';
+import { addTableRowAfter, addTableRowBefore, deleteCurrentTableRow, findTableContext, moveCurrentTableRow, moveCurrentTableColumn, normalizePastedMarkdownTable } from './tableCommands';
 import { handleTripleClickByDetail } from './tripleClickSelection';
 import { updateTocBlocks } from '../toc/tocService';
 import type {
@@ -168,6 +168,15 @@ import type { EditorSyncCaret, EditorSyncSnapshot, MarkdownSyncAnchor } from './
 
 const LARGE_DOCUMENT_SEMANTIC_LIMIT = 300_000;
 const MARKDOWN_SYNC_DEBOUNCE_MS = 120;
+
+function tableMoveShortcut(command: Command): Command {
+  return (state, dispatch, view) => {
+    if (!findTableContext(state)) return false;
+    command(state, dispatch, view);
+    // At table boundaries, consume Alt+Left/Right rather than navigate browser history.
+    return true;
+  };
+}
 
 function editorThemesEqual(
   current: EditorThemeOptions | undefined,
@@ -1694,6 +1703,11 @@ export class ProseMirrorEditorCore implements EditorCore {
           'Mod-b': toggleInlineSourceFormat('strong'),
           'Mod-i': toggleInlineSourceFormat('em'),
           'Ctrl-`': toggleInlineSourceFormat('code'),
+          'Shift-Ctrl-Backspace': deleteCurrentTableRow(),
+          'Alt-ArrowUp': tableMoveShortcut(moveCurrentTableRow(-1)),
+          'Alt-ArrowDown': tableMoveShortcut(moveCurrentTableRow(1)),
+          'Alt-ArrowLeft': tableMoveShortcut(moveCurrentTableColumn(-1)),
+          'Alt-ArrowRight': tableMoveShortcut(moveCurrentTableColumn(1)),
           'Mod-k': (_state, _dispatch, _view) => {
             this.options.onLinkShortcut?.();
             return Boolean(this.options.onLinkShortcut);

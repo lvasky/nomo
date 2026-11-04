@@ -109,7 +109,8 @@
     return [
           sourceEmojiSuggestions(),
           historyCompartment.of(history()),
-          keymap.of([...defaultKeymap, ...historyKeymap]),
+          // Ctrl+/ belongs to the app's source/semantic mode switch.
+          keymap.of([...defaultKeymap.filter((binding) => binding.key !== 'Mod-/'), ...historyKeymap]),
           EditorView.lineWrapping,
           sourceSpacerField,
           readonlyCompartment.of([

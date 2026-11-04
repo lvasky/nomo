@@ -269,10 +269,13 @@
 .table-util-bar {
   position: absolute;
   left: 0;
-  top: -42px;
+  bottom: calc(100% + 8px);
   display: flex;
   align-items: center;
   gap: 3px;
+  max-width: 100%;
+  box-sizing: border-box;
+  flex-wrap: wrap;
   padding: 3px 4px;
   border: 1px solid color-mix(in srgb, var(--md-editor-table-border) 58%, transparent);
   border-radius: 8px;
@@ -291,6 +294,11 @@
 .table-inline-controls.visible .table-util-bar {
   opacity: 1;
   transform: translateY(0);
+}
+
+.table-util-bar .util-btn:disabled {
+  opacity: 0.35;
+  cursor: default;
 }
 
 .table-util-separator {

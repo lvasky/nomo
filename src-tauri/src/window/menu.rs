@@ -330,7 +330,7 @@ fn build_paragraph_menu<R: Runtime>(app: &AppHandle<R>) -> Result<tauri::menu::S
             app,
             "insert-table",
             tr(locale, "menu_table"),
-            Some("CmdOrCtrl+Shift+T"),
+            Some("CmdOrCtrl+T"),
         )?)
         .item(&menu_item(
             app,
@@ -508,7 +508,7 @@ fn build_view_menu<R: Runtime>(app: &AppHandle<R>) -> Result<tauri::menu::Submen
             app,
             "toggle-source",
             tr(locale, "menu_toggle_source"),
-            Some("CmdOrCtrl+E"),
+            Some("CmdOrCtrl+Slash"),
         )?)
         .item(&menu_item(
             app,

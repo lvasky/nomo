@@ -260,7 +260,7 @@ export function handleGlobalShortcut(
     } else {
       handlers.openSearchPanel(true);
     }
-  } else if (key === 'e') {
+  } else if (key === '/' && !event.shiftKey) {
     event.preventDefault();
     handlers.setMode(handlers.getMode() === 'source' ? 'semantic' : 'source');
   } else if (key === 'l' && event.shiftKey) {
@@ -312,10 +312,6 @@ export function handleGlobalShortcut(
     // Ctrl+Shift+Q → 引用块
     event.preventDefault();
     handlers.runCommand({ type: 'toggleBlockquote' });
-  } else if (key === 't') {
-    // Ctrl+Shift+T → 表格尺寸选择
-    event.preventDefault();
-    handlers.openTablePicker();
   } else if (key === 'm') {
     // Ctrl+Shift+M → 公式块
     event.preventDefault();

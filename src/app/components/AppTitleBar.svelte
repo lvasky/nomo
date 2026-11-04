@@ -705,7 +705,7 @@
                 >
                 <div class="divider"></div>
                 <button on:click={() => finish(openTablePicker, 'paragraph')}
-                  >{t.table()} <span class="shortcut">Ctrl + Shift + T</span></button
+                  >{t.table()} <span class="shortcut">Ctrl + T</span></button
                 >
                 <button
                   on:click={() =>
@@ -882,7 +882,7 @@
                   role="menuitemradio"
                   aria-checked={mode === 'source'}
                   on:click={() => finish(() => setMode('source'), 'view')}
-                  >{t.sourceMode()} <span class="shortcut">Ctrl + E</span></button
+                  >{t.sourceMode()} <span class="shortcut">Ctrl + /</span></button
                 >
                 <button
                   role="menuitemradio"

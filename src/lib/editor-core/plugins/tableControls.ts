@@ -12,6 +12,10 @@ import {
   resizeCurrentTable,
   setTableColumnAlignment,
   toggleFirstTableRowHeader,
+  canMoveTable,
+  findTableContext,
+  moveCurrentTableRow,
+  moveCurrentTableColumn,
 } from '../tableCommands';
 import { findActiveTableElement } from './tableControlDom';
 import { TABLE_LAYOUT_EVENT } from '../../table-layout/dom';
@@ -58,6 +62,7 @@ class TableControlsView {
   private formatTable: Node | null = null;
   private formatStrict = true;
   private formatEnabled = false;
+  private moveEnabled = false;
   private readonly unsubscribeLocale: () => void;
   private readonly closeResizePickerOnDocumentPointerDown = (event: PointerEvent) => {
     if (!this.resizePickerOpen) return;
@@ -522,9 +527,26 @@ class TableControlsView {
       this.formatTable = table ?? null;
       this.formatStrict = strict;
       this.formatEnabled = !!table && canBeautifyTable(table, strict);
+      this.moveEnabled = !!table && canMoveTable(table);
     }
     formatButton.disabled = !this.formatEnabled;
     bar.appendChild(formatButton);
+    bar.appendChild(this.el('span', 'table-util-separator'));
+    const context = findTableContext(this.view.state);
+    const moves = [
+      { title: t.moveTableRowUp(), label: '↑', axis: 'row', direction: -1, enabled: !!context && context.rowIndex > 0 },
+      { title: t.moveTableRowDown(), label: '↓', axis: 'row', direction: 1, enabled: !!context && context.rowIndex < rowCount - 1 },
+      { title: t.moveTableColumnLeft(), label: '←', axis: 'column', direction: -1, enabled: !!context && context.columnIndex > 0 },
+      { title: t.moveTableColumnRight(), label: '→', axis: 'column', direction: 1, enabled: !!context && context.columnIndex < colCount - 1 },
+    ] as const;
+    for (const move of moves) {
+      const button = this.createButton(`${move.title} (Alt+${move.label})`, move.label,
+        `util-btn util-move-${move.axis}-${move.direction === -1 ? 'before' : 'after'}`,
+        () => this.runAndClosePicker(move.axis === 'row'
+          ? moveCurrentTableRow(move.direction) : moveCurrentTableColumn(move.direction)));
+      button.disabled = !this.moveEnabled || !move.enabled;
+      bar.appendChild(button);
+    }
     bar.appendChild(
       this.createUtilityButton(
         t.deleteTable(),
@@ -710,6 +732,7 @@ class TableControlsView {
       event.preventDefault();
       event.stopPropagation();
       if (!this.view.editable) return;
+      if (button.disabled) return;
       onClick();
     });
     return button;

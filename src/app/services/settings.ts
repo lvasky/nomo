@@ -156,13 +156,13 @@ export const DEFAULT_SHORTCUT_PREFERENCES: ShortcutPreferences = {
   'save-file': 'Ctrl+S',
   'export-html': 'Ctrl+Shift+E',
   'export-pdf': 'Ctrl+Shift+P',
-  'toggle-source': 'Ctrl+E',
+  'toggle-source': 'Ctrl+/',
   'toggle-theme': 'Ctrl+Shift+L',
   'toggle-focus': 'Ctrl+Shift+F',
   'toggle-toolbar': 'Ctrl+Shift+B',
   'toggle-markdown-mini': 'Ctrl+Alt+M',
   'insert-code-block': 'Ctrl+Shift+K',
-  'insert-table': 'Ctrl+Shift+T',
+  'insert-table': 'Ctrl+T',
   'insert-math-block': 'Ctrl+Shift+M',
   'menu-link': 'Ctrl+K',
   'menu-clear-format': 'Ctrl+\\',
@@ -891,11 +891,14 @@ function normalizeShortcutPreferences(value: unknown): ShortcutPreferences {
       normalized[key] = normalizeShortcutText(shortcut);
     }
   }
+  // Upgrade previous defaults without replacing explicitly customized bindings.
+  if (normalized['toggle-source'] === 'Ctrl+E') normalized['toggle-source'] = 'Ctrl+/';
+  if (normalized['insert-table'] === 'Ctrl+Shift+T') normalized['insert-table'] = 'Ctrl+T';
   return normalized;
 }
 
 function isValidShortcut(value: string): boolean {
-  return /^[A-Za-z0-9+\\\-\[\]` ]{3,40}$/.test(value.trim());
+  return /^[A-Za-z0-9+\\\-\[\]`/ ]{3,40}$/.test(value.trim());
 }
 
 function normalizeShortcutText(value: string): string {

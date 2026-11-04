@@ -3480,7 +3480,7 @@
       ),
       commandMenuItem(t.toggleTableHeader(), { type: 'toggleTableHeader' }, 'table'),
       menuSeparator(),
-      commandMenuItem(t.deleteRow(), { type: 'deleteTableRow' }, 'delete'),
+      commandMenuItem(t.deleteRow(), { type: 'deleteTableRow' }, 'delete', 'Ctrl+Shift+Backspace'),
       commandMenuItem(t.deleteColumn(), { type: 'deleteTableColumn' }, 'delete'),
       { ...commandMenuItem(t.deleteTable(), { type: 'deleteTable' }, 'delete'), danger: true },
     ];
